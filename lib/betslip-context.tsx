@@ -57,6 +57,8 @@ interface BetSlipContextValue {
   betslipOpen: boolean;
   setBetslipOpen: (open: boolean) => void;
   toggleBetslip: () => void;
+  /** Open betslip sheet on Open Bets or Bet History tab (mobile-friendly). */
+  openTicketsTab: (tab?: "open-bets" | "bet-history") => void;
   loadSlip: (selections: BetSelection[], stake?: number) => void;
 }
 
@@ -121,6 +123,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
         league: match.league,
         marketId: "1x2",
         marketName: "1X2",
+        kickoff: match.kickoff,
       });
     },
     [replaceMatchSelection],
@@ -139,6 +142,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
         league: match.league,
         marketId: input.marketId,
         marketName: input.marketName,
+        kickoff: match.kickoff,
       });
     },
     [replaceMatchSelection],
@@ -227,6 +231,14 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
     setBetslipOpen((open) => !open);
   }, []);
 
+  const openTicketsTab = useCallback(
+    (tab: "open-bets" | "bet-history" = "open-bets") => {
+      setSlipTab(tab);
+      setBetslipOpen(true);
+    },
+    [],
+  );
+
   const loadSlip = useCallback((newSelections: BetSelection[], newStake?: number) => {
     setSelections(newSelections);
     setDisabledIds(new Set());
@@ -266,6 +278,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       betslipOpen,
       setBetslipOpen,
       toggleBetslip,
+      openTicketsTab,
       loadSlip,
     }),
     [
@@ -291,6 +304,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       potentialWin,
       betslipOpen,
       toggleBetslip,
+      openTicketsTab,
       loadSlip,
     ],
   );

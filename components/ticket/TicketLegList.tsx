@@ -1,7 +1,15 @@
 "use client";
 
-import type { TicketLegDisplay } from "@/lib/ticket-display";
+import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import type { PlacedBet } from "@/lib/bet-types";
+import {
+  normalizeTicketScoreLabel,
+  type TicketLegDisplay,
+} from "@/lib/ticket-display";
+import { getBetById } from "@/lib/bet-store";
 import { formatOdds } from "@/lib/utils";
+import { ManagerLegEditModal } from "@/components/manager/ManagerLegEditModal";
 
 function StatusIcon({ won, lost }: { won: boolean; lost: boolean }) {
   if (won) {
@@ -31,7 +39,6 @@ function StatusIcon({ won, lost }: { won: boolean; lost: boolean }) {
   );
 }
 
-/** Faint cup ghost blended into won leg rows */
 function TrophyWatermark() {
   return (
     <div
@@ -57,88 +64,147 @@ function TrophyWatermark() {
 
 interface TicketLegItemProps {
   leg: TicketLegDisplay;
+  legIndex: number;
+  betId: string;
+  canEdit: boolean;
+  onBetUpdate?: (bet: PlacedBet) => void;
 }
 
-export function TicketLegItem({ leg }: TicketLegItemProps) {
+export function TicketLegItem({
+  leg,
+  legIndex,
+  betId,
+  canEdit,
+  onBetUpdate,
+}: TicketLegItemProps) {
+  const [editOpen, setEditOpen] = useState(false);
   const won = leg.legWon === true;
   const lost = leg.legWon === false;
   const pending = leg.legWon === null;
-  const pickLabel = leg.selection.selectionLabel;
+  const pickLabel = normalizeTicketScoreLabel(leg.selection.selectionLabel);
   const pickOdds = formatOdds(leg.selection.odds);
+  const outcomeLabel = normalizeTicketScoreLabel(
+    leg.selection.outcomeLabel ?? leg.selection.selectionLabel,
+  );
+  const marketName = leg.selection.marketName ?? "1X2";
+
+  function handleSaved() {
+    const updated = getBetById(betId);
+    if (updated && onBetUpdate) onBetUpdate(updated);
+  }
 
   return (
-    <li
-      className={`relative overflow-hidden border-b border-brand-soft last:border-b-0 ${
-        won ? "bg-accent-soft" : lost ? "bg-red-50" : "bg-brand-light"
-      }`}
-    >
-      {won && <TrophyWatermark />}
+    <>
+      <li
+        className={`relative overflow-hidden border-b border-brand-soft last:border-b-0 ${
+          won ? "bg-accent-soft" : lost ? "bg-red-50" : "bg-brand-light"
+        }`}
+      >
+        {won && <TrophyWatermark />}
 
-      <div className="relative flex gap-3 px-3 py-3">
-        <div className="pt-0.5">
-          <StatusIcon won={won} lost={lost} />
-        </div>
+        <div className="relative flex gap-3 px-3 py-3">
+          <div className="pt-0.5">
+            <StatusIcon won={won} lost={lost} />
+          </div>
 
-        <div className="relative z-[1] min-w-0 flex-1 pr-2">
-          <p className="text-[11px] text-muted sm:text-xs">{leg.kickoffLabel}</p>
+          <div className="relative z-[1] min-w-0 flex-1 pr-2">
+            <p className="text-[11px] text-muted sm:text-xs">{leg.kickoffLabel}</p>
 
-          <p className="mt-0.5 text-sm font-bold leading-snug text-foreground sm:text-base">
-            {leg.selection.homeTeam} - {leg.selection.awayTeam}
-          </p>
-
-          {leg.ftScore && (
-            <p className="mt-1.5 text-xs text-foreground">
-              FT Score: <span className="font-bold">{leg.ftScore}</span>
+            <p className="mt-0.5 text-sm font-bold leading-snug text-foreground sm:text-base">
+              {leg.selection.homeTeam} - {leg.selection.awayTeam}
             </p>
-          )}
 
-          {pending && (
-            <p className="mt-1 text-xs font-medium text-amber-600">Awaiting result</p>
-          )}
+            {leg.ftScore && (
+              <p className="mt-1.5 text-xs text-foreground">
+                FT Score: <span className="font-bold">{leg.ftScore}</span>
+              </p>
+            )}
 
-          <div className="mt-2 space-y-0.5 text-xs sm:text-[13px]">
-            <p className="flex flex-wrap items-center gap-1 text-foreground">
-              <span className="text-muted">Pick:</span>
-              <span className="font-bold">
-                {pickLabel} @ {pickOdds}
-              </span>
-              {won && (
-                <svg className="h-3.5 w-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-              {lost && (
-                <svg className="h-3.5 w-3.5 text-live" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              )}
-            </p>
-            <p>
-              <span className="text-muted">Market:</span>{" "}
-              <span className="font-medium text-foreground">
-                {leg.selection.marketName ?? "1X2"}
-              </span>
-            </p>
-            <p>
-              <span className="text-muted">Outcome:</span>{" "}
-              <span className="font-medium text-foreground">{pickLabel}</span>
-            </p>
+            {pending && !leg.ftScore && (
+              <p className="mt-1 text-xs font-medium text-amber-600">
+                {leg.voidLeg ? "Void leg" : "Awaiting result"}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (canEdit) setEditOpen(true);
+              }}
+              className={`mt-2 w-full space-y-0.5 rounded-md text-left text-xs sm:text-[13px] ${
+                canEdit
+                  ? "cursor-pointer ring-brand/0 transition hover:bg-white/40 active:bg-white/50"
+                  : "cursor-default"
+              }`}
+              aria-label={canEdit ? "Edit leg pick, market, outcome and odds" : undefined}
+            >
+              <p className="flex flex-wrap items-center gap-1 text-foreground">
+                <span className="text-muted">Pick:</span>
+                <span className="font-bold">
+                  {pickLabel} @ {pickOdds}
+                </span>
+                {won && (
+                  <svg className="h-3.5 w-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+                {lost && (
+                  <svg className="h-3.5 w-3.5 text-live" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+              </p>
+              <p>
+                <span className="text-muted">Market:</span>{" "}
+                <span className="font-medium text-foreground">{marketName}</span>
+              </p>
+              <p>
+                <span className="text-muted">Outcome:</span>{" "}
+                <span className="font-medium text-foreground">{outcomeLabel}</span>
+              </p>
+            </button>
           </div>
         </div>
-      </div>
-    </li>
+      </li>
+
+      {canEdit && (
+        <ManagerLegEditModal
+          open={editOpen}
+          legIndex={legIndex}
+          selection={leg.selection}
+          legWon={leg.legWon}
+          voidLeg={leg.voidLeg}
+          ftScore={leg.ftScore}
+          betId={betId}
+          onClose={() => setEditOpen(false)}
+          onSaved={handleSaved}
+        />
+      )}
+    </>
   );
 }
 
 interface TicketLegListProps {
+  bet: PlacedBet;
   legs: TicketLegDisplay[];
+  onBetUpdate?: (bet: PlacedBet) => void;
 }
 
-export function TicketLegList({ legs }: TicketLegListProps) {
+export function TicketLegList({ bet, legs, onBetUpdate }: TicketLegListProps) {
+  const { user } = useAuth();
+  const canEdit = user?.isManager === true && !!onBetUpdate;
+
   return (
     <ul>
-      {legs.map((leg) => (
-        <TicketLegItem key={leg.selection.id} leg={leg} />
+      {legs.map((leg, index) => (
+        <TicketLegItem
+          key={`${leg.selection.id}-${index}`}
+          leg={leg}
+          legIndex={index}
+          betId={bet.id}
+          canEdit={canEdit}
+          onBetUpdate={onBetUpdate}
+        />
       ))}
     </ul>
   );

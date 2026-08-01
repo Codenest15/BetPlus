@@ -1,21 +1,49 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useBetSlip } from "@/lib/betslip-context";
 import { getBetsByUser } from "@/lib/bet-store";
 
 const TABS = [
-  { href: "/", label: "Sports", match: ["/"], icon: SportsIcon },
+  { id: "sports", href: "/", label: "Sports", match: ["/"], icon: SportsIcon },
   {
+    id: "menu",
     href: "/menu",
     label: "AZ Menu",
-    match: ["/menu", "/virtual", "/jackpot", "/scores", "/wallet", "/promotions", "/bet-history", "/verify", "/support"],
+    match: [
+      "/menu",
+      "/virtual",
+      "/jackpot",
+      "/scores",
+      "/wallet",
+      "/promotions",
+      "/bet-history",
+      "/verify",
+      "/support",
+    ],
     icon: MenuIcon,
   },
-  { href: "/games", label: "Games", match: ["/games"], icon: GamesIcon },
-  { href: "/my-bets", label: "Open Bets", match: ["/my-bets", "/bet-history", "/bet"], icon: OpenBetsIcon, showBadge: true },
-  { href: "/account", label: "Me", match: ["/account"], icon: MeIcon, requiresAuth: true },
+  { id: "games", href: "/games", label: "Games", match: ["/games"], icon: GamesIcon },
+  {
+    id: "open-bets",
+    href: "/my-bets",
+    label: "Open Bets",
+    match: ["/my-bets", "/bet-history", "/bet"],
+    icon: OpenBetsIcon,
+    showBadge: true,
+    opensTickets: true,
+  },
+  {
+    id: "me",
+    href: "/account",
+    label: "Me",
+    match: ["/account", "/manager"],
+    icon: MeIcon,
+    requiresAuth: true,
+  },
 ] as const;
 
 function isTabActive(pathname: string, match: readonly string[]) {
@@ -31,10 +59,52 @@ function isTabActive(pathname: string, match: readonly string[]) {
 
 export function MobileNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, openLogin } = useAuth();
-  const openTicketCount = user
-    ? getBetsByUser(user.id).filter((b) => b.status === "open").length
-    : 0;
+  const { openTicketsTab } = useBetSlip();
+  const [betsRevision, setBetsRevision] = useState(0);
+
+  useEffect(() => {
+    function bump() {
+      setBetsRevision((n) => n + 1);
+    }
+
+    function onStorage(event: StorageEvent) {
+      if (event.key === "betplus_bets" || event.key === "betplus_users") {
+        bump();
+      }
+    }
+
+    window.addEventListener("betplus:balance-updated", bump);
+    window.addEventListener("betplus:user-updated", bump);
+    window.addEventListener("betplus:bets-updated", bump);
+    window.addEventListener("focus", bump);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("betplus:balance-updated", bump);
+      window.removeEventListener("betplus:user-updated", bump);
+      window.removeEventListener("betplus:bets-updated", bump);
+      window.removeEventListener("focus", bump);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
+  const openTicketCount = useMemo(() => {
+    if (!user) return 0;
+    return getBetsByUser(user.id).filter((b) => b.status === "open").length;
+  }, [user?.id, betsRevision]);
+
+  function handleOpenBets() {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      router.push("/my-bets");
+      return;
+    }
+    if (!user) {
+      openLogin();
+      return;
+    }
+    openTicketsTab("open-bets");
+  }
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-brand-soft bg-surface shadow-[0_-2px_10px_rgb(26_85_104_/_0.08)]">
@@ -45,7 +115,7 @@ export function MobileNav() {
           if ("requiresAuth" in tab && tab.requiresAuth && !user) {
             return (
               <button
-                key={tab.label}
+                key={tab.id}
                 type="button"
                 onClick={openLogin}
                 className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] text-muted"
@@ -56,30 +126,46 @@ export function MobileNav() {
             );
           }
 
+          if ("opensTickets" in tab && tab.opensTickets) {
+            const active = isTabActive(pathname, tab.match);
+            const badge =
+              tab.showBadge && openTicketCount > 0 ? openTicketCount : undefined;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={handleOpenBets}
+                className={`relative flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] ${
+                  active ? "font-semibold text-brand" : "text-muted"
+                }`}
+              >
+                <span className="relative">
+                  <Icon active={active} />
+                  {badge !== undefined && (
+                    <span className="absolute -right-2 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-brand px-0.5 text-[8px] font-bold text-white">
+                      {badge}
+                    </span>
+                  )}
+                </span>
+                <span>{tab.label}</span>
+              </button>
+            );
+          }
+
           if (!("href" in tab)) return null;
 
           const active = isTabActive(pathname, tab.match);
-          const badge =
-            "showBadge" in tab && tab.showBadge && openTicketCount > 0
-              ? openTicketCount
-              : undefined;
 
           return (
             <Link
-              key={tab.href}
+              key={tab.id}
               href={tab.href}
               className={`relative flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] ${
                 active ? "font-semibold text-brand" : "text-muted"
               }`}
             >
-              <span className="relative">
-                <Icon active={active} />
-                {badge !== undefined && (
-                  <span className="absolute -right-2 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-brand px-0.5 text-[8px] font-bold text-white">
-                    {badge}
-                  </span>
-                )}
-              </span>
+              <Icon active={active} />
               <span>{tab.label}</span>
             </Link>
           );

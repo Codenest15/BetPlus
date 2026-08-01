@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
 import type { PlacedBet } from "@/lib/bet-types";
 import {
   betTypeLabel,
@@ -10,10 +12,13 @@ import {
   totalReturn,
 } from "@/lib/ticket-display";
 import { formatOdds } from "@/lib/utils";
+import { ManagerEditPopup } from "@/components/manager/ManagerEditPopup";
+import { ManagerTicketEditPanel } from "@/components/manager/ManagerTicketEditPanel";
 import { WinTrophyIcon } from "./WinTrophyIcon";
 
 interface TicketSummaryProps {
   bet: PlacedBet;
+  onBetUpdate?: (bet: PlacedBet) => void;
 }
 
 function TrophyBadge() {
@@ -34,7 +39,10 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function TicketSummary({ bet }: TicketSummaryProps) {
+export function TicketSummary({ bet, onBetUpdate }: TicketSummaryProps) {
+  const { user } = useAuth();
+  const isManager = user?.isManager === true;
+  const [editOpen, setEditOpen] = useState(false);
   const isWon = bet.status === "won";
   const isLost = bet.status === "lost";
   const isOpen = bet.status === "open";
@@ -53,11 +61,21 @@ export function TicketSummary({ bet }: TicketSummaryProps) {
     .replace(",", "");
 
   return (
-    <section className="bg-brand text-white">
-      <div className="px-3 py-3">
+    <>
+      <section className="bg-brand text-white">
+        <button
+          type="button"
+          onClick={() => {
+            if (isManager) setEditOpen(true);
+          }}
+          className={`w-full px-3 py-3 text-left ${isManager ? "cursor-pointer active:bg-white/5" : "cursor-default"}`}
+          aria-label={isManager ? "Edit ticket summary" : undefined}
+        >
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <p className="text-[11px] text-white/55">Ticket ID: {ticketId(bet)}</p>
+            <p className="text-[11px] text-white/55">
+              Ticket ID: {ticketId(bet)}
+            </p>
             <p className="mt-1 text-base font-bold text-[#f5c842]">{betTypeLabel(bet)}</p>
           </div>
 
@@ -100,7 +118,21 @@ export function TicketSummary({ bet }: TicketSummaryProps) {
             <SummaryRow label="Potential Return" value={formatAmountPlain(bet.potentialWin)} />
           )}
         </div>
-      </div>
-    </section>
+      </button>
+      </section>
+
+      {isManager && onBetUpdate && (
+        <ManagerEditPopup open={editOpen} onClose={() => setEditOpen(false)}>
+          <ManagerTicketEditPanel
+            bet={bet}
+            onSaved={(updated) => {
+              onBetUpdate(updated);
+              setEditOpen(false);
+            }}
+            onClose={() => setEditOpen(false)}
+          />
+        </ManagerEditPopup>
+      )}
+    </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BetHistoryCard } from "@/components/BetHistoryCard";
 import { useBetSlip } from "@/lib/betslip-context";
 import { useAuth } from "@/lib/auth-context";
@@ -105,6 +105,14 @@ export function BetTicketsPanel({
   const [resultFilter, setResultFilter] = useState<ResultFilter>("all");
   const [refreshKey, setRefreshKey] = useState(0);
 
+  useEffect(() => {
+    function bump() {
+      setRefreshKey((k) => k + 1);
+    }
+    window.addEventListener("betplus:bets-updated", bump);
+    return () => window.removeEventListener("betplus:bets-updated", bump);
+  }, []);
+
   const activeTab = controlledTab ?? internalTab;
 
   function setActiveTab(tab: TicketsTab) {
@@ -121,7 +129,8 @@ export function BetTicketsPanel({
 
   const allBets = useMemo(
     () => (user ? getBetsByUser(user.id) : []),
-    [user, refreshKey],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshKey forces re-read after settle/clear
+    [user?.id, refreshKey],
   );
 
   const filtered = useMemo(
@@ -160,7 +169,7 @@ export function BetTicketsPanel({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-[50vh] flex-col">
       {!hideMainTabs && (
         <div className="grid grid-cols-2 border-b border-border">
           <button

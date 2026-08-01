@@ -1,7 +1,7 @@
 const FAQ = [
   {
     q: "How do I deposit?",
-    a: "Wallet → Deposit. Mobile money, card, or bank transfer.",
+    a: "Wallet → Deposit. Choose Mobile Money, Visa card, USDT, or Bitcoin.",
   },
   {
     q: "How long do withdrawals take?",

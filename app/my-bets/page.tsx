@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 
 export default function MyBetsPage() {
   const { user, openLogin } = useAuth();
-  const { selections, toggleBetslip } = useBetSlip();
+  const { selections, setSlipTab, setBetslipOpen } = useBetSlip();
 
   return (
     <div className="-mx-3 flex min-h-[calc(100vh-8rem)] flex-col md:mx-0 md:min-h-[calc(100vh-6rem)]">
@@ -25,7 +25,10 @@ export default function MyBetsPage() {
         {selections.length > 0 && (
           <button
             type="button"
-            onClick={toggleBetslip}
+            onClick={() => {
+              setSlipTab("betslip");
+              setBetslipOpen(true);
+            }}
             className="mt-3 w-full rounded-md bg-brand py-2 text-xs font-semibold text-white"
           >
             Open betslip ({selections.length} pick{selections.length > 1 ? "s" : ""})
@@ -45,7 +48,7 @@ export default function MyBetsPage() {
           </button>
         </div>
       ) : (
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 overflow-hidden">
           <BetTicketsPanel />
         </div>
       )}

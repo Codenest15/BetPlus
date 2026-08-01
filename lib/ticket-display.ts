@@ -1,5 +1,8 @@
 import type { BetSelection } from "./types";
 import type { BetStatus, PlacedBet } from "./bet-types";
+import { isLegPastFullTime } from "./bet-edit-rules";
+import { evaluateLegAtFt, ftScoreLabel, legResultForIndex } from "./bet-settlement";
+import { formatFtScore, getMatchFtScore } from "./match-results";
 
 export interface TicketLegDisplay {
   selection: BetSelection;
@@ -7,29 +10,7 @@ export interface TicketLegDisplay {
   ftScore: string | null;
   /** null = pending / not settled */
   legWon: boolean | null;
-}
-
-function hash(s: string) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-
-const DEMO_FT_SCORES: Record<string, string> = {
-  "m-leeds-arsenal": "0:4",
-  "m-chelsea-westham": "0:3",
-  "m-elche-barcelona": "2:1",
-  "m-werder-bayern": "0:2",
-  "m-wolfsburg-leipzig": "0:3",
-  "m-hoffenheim-heidenheim": "2:0",
-};
-
-function mockFtScore(matchId: string, legWon: boolean | null): string {
-  if (DEMO_FT_SCORES[matchId]) return DEMO_FT_SCORES[matchId];
-  const h = hash(matchId);
-  const home = (h % 3) + (legWon === false ? 2 : 0);
-  const away = ((h >> 3) % 4) + (legWon === true ? 1 : 0);
-  return `${home}:${away}`;
+  voidLeg?: boolean;
 }
 
 function formatTicketDate(iso: string) {
@@ -49,6 +30,9 @@ function legKickoffLabel(bet: PlacedBet, index: number) {
   const code = bet.bookingCode.toUpperCase();
   if (demoKickoffs[code]?.[index]) return demoKickoffs[code][index];
 
+  const sel = bet.selections[index];
+  if (sel?.kickoff) return formatTicketDate(sel.kickoff);
+
   const d = new Date(bet.placedAt);
   d.setDate(d.getDate() + index + 1);
   d.setHours(15, 0, 0, 0);
@@ -56,6 +40,9 @@ function legKickoffLabel(bet: PlacedBet, index: number) {
 }
 
 export function betTypeLabel(bet: PlacedBet) {
+  if (bet.flexCut && bet.flexCut > 0) {
+    return bet.selections.length > 1 ? `Flex ${bet.flexCut}` : "Singles";
+  }
   return bet.selections.length > 1 ? "Multiple" : "Singles";
 }
 
@@ -89,32 +76,81 @@ export function verifyCode(bet: PlacedBet) {
 }
 
 export function getLegDisplays(bet: PlacedBet): TicketLegDisplay[] {
-  const settled = bet.status !== "open";
-
   return bet.selections.map((sel, i) => {
-    let legWon: boolean | null = null;
+    const stored = legResultForIndex(bet, i);
+    const managerFt = sel.managerFtScore
+      ? formatFtScore(sel.managerFtScore.home, sel.managerFtScore.away)
+      : null;
 
-    if (bet.status === "won") {
-      legWon = true;
-    } else if (bet.status === "lost") {
-      // One leg spoils the accumulator — earlier legs win, one leg loses
-      const losingLegIndex = bet.selections.length - 1;
-      legWon = i < losingLegIndex;
-    } else if (bet.status === "void") {
-      legWon = null;
+    if (stored) {
+      return {
+        selection: sel,
+        kickoffLabel: legKickoffLabel(bet, i),
+        ftScore: ftScoreLabel(stored),
+        legWon: stored.void ? null : stored.won,
+        voidLeg: stored.void,
+      };
     }
 
-    const ftScore = settled ? mockFtScore(sel.matchId, legWon) : null;
+    if (managerFt) {
+      const evaluated = evaluateLegAtFt(bet, i);
+      return {
+        selection: sel,
+        kickoffLabel: legKickoffLabel(bet, i),
+        ftScore: managerFt,
+        legWon: evaluated ? (evaluated.void ? null : evaluated.won) : null,
+        voidLeg: evaluated?.void,
+      };
+    }
+
+    if (bet.status === "open" && isLegPastFullTime(bet, i)) {
+      const evaluated = evaluateLegAtFt(bet, i);
+      if (evaluated) {
+        return {
+          selection: sel,
+          kickoffLabel: legKickoffLabel(bet, i),
+          ftScore: ftScoreLabel(evaluated),
+          legWon: evaluated.void ? null : evaluated.won,
+          voidLeg: evaluated.void,
+        };
+      }
+    }
+
+    if (bet.status !== "open") {
+      const evaluated = evaluateLegAtFt(bet, i);
+      if (evaluated) {
+        return {
+          selection: sel,
+          kickoffLabel: legKickoffLabel(bet, i),
+          ftScore: ftScoreLabel(evaluated),
+          legWon: evaluated.void ? null : evaluated.won,
+          voidLeg: evaluated.void,
+        };
+      }
+
+      const { home, away } = getMatchFtScore(sel.matchId);
+      return {
+        selection: sel,
+        kickoffLabel: legKickoffLabel(bet, i),
+        ftScore: formatFtScore(home, away),
+        legWon: null,
+      };
+    }
 
     return {
       selection: sel,
       kickoffLabel: legKickoffLabel(bet, i),
-      ftScore,
-      legWon: settled ? legWon : null,
+      ftScore: null,
+      legWon: null,
     };
   });
 }
 
 export function formatAmountPlain(amount: number) {
   return amount.toFixed(2);
+}
+
+/** Ticket scores use colons (2:1) — never dashes (2-1). */
+export function normalizeTicketScoreLabel(label: string): string {
+  return label.replace(/(\d+)\s*-\s*(\d+)/g, "$1:$2");
 }

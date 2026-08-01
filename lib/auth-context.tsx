@@ -51,6 +51,23 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function usersEqual(a: User | null, b: User | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return a === b;
+  return (
+    a.id === b.id &&
+    a.balance === b.balance &&
+    a.name === b.name &&
+    a.email === b.email &&
+    a.phone === b.phone &&
+    a.isManager === b.isManager
+  );
+}
+
+function settingsEqual(a: UserSettings, b: UserSettings): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
@@ -65,6 +82,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSettings(getUserSettings(current.id) ?? DEFAULT_SETTINGS);
     }
     setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    function onBalanceUpdated(event: Event) {
+      const { userId } = (event as CustomEvent<{ userId: string }>).detail;
+      setUser((current) => {
+        if (!current || current.id !== userId) return current;
+        const next = getCurrentUser();
+        return usersEqual(current, next) ? current : next;
+      });
+    }
+
+    window.addEventListener("betplus:balance-updated", onBalanceUpdated);
+
+    function onUserUpdated(event: Event) {
+      const { userId } = (event as CustomEvent<{ userId: string }>).detail;
+      setUser((current) => {
+        if (!current || current.id !== userId) return current;
+        const next = getCurrentUser();
+        return usersEqual(current, next) ? current : next;
+      });
+    }
+
+    window.addEventListener("betplus:user-updated", onUserUpdated);
+    return () => {
+      window.removeEventListener("betplus:balance-updated", onBalanceUpdated);
+      window.removeEventListener("betplus:user-updated", onUserUpdated);
+    };
   }, []);
 
   const login = useCallback((identifier: string, password: string) => {
@@ -128,11 +173,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = useCallback(() => {
     const current = getCurrentUser();
-    setUser(current);
+    setUser((prev) => (usersEqual(prev, current) ? prev : current));
     if (current) {
-      setSettings(getUserSettings(current.id) ?? DEFAULT_SETTINGS);
+      const nextSettings = getUserSettings(current.id) ?? DEFAULT_SETTINGS;
+      setSettings((prev) =>
+        settingsEqual(prev, nextSettings) ? prev : nextSettings,
+      );
     }
   }, []);
+
+  useEffect(() => {
+    function onStorage(event: StorageEvent) {
+      if (event.key === "betplus_users" || event.key === "betplus_session") {
+        refreshUser();
+      }
+    }
+
+    function onVisible() {
+      if (document.visibilityState === "visible") refreshUser();
+    }
+
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", refreshUser);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", refreshUser);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refreshUser]);
 
   const deductBalance = useCallback(
     (amount: number) => {

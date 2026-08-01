@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AccountGuest } from "@/components/AccountGuest";
 import { AccountProfile } from "@/components/AccountProfile";
 import { PersonalSettings } from "@/components/PersonalSettings";
 import { useAuth } from "@/lib/auth-context";
 
 export default function AccountPage() {
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, logout, refreshUser } = useAuth();
   const [view, setView] = useState<"main" | "settings">("main");
+
+  useEffect(() => {
+    refreshUser();
+  }, [refreshUser]);
 
   if (isLoading) {
     return (

@@ -80,14 +80,14 @@ export function TicketDetails({ bet, onBetUpdate }: TicketDetailsProps) {
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-        <TicketSummary bet={bet} />
+        <TicketSummary bet={bet} onBetUpdate={onBetUpdate} />
         <TicketActions
           status={bet.status}
           onRemix={handleRemix}
           onShowOff={isWon ? handleShowOff : undefined}
         />
         {!isOpen && <TicketVerifyBar code={verifyCode(bet)} />}
-        <TicketLegList legs={legs} />
+        <TicketLegList bet={bet} legs={legs} onBetUpdate={onBetUpdate} />
         <TicketFooter bet={bet} />
 
         {isOpen && onBetUpdate && !isDemo && (

@@ -36,6 +36,12 @@ export interface BetSelection {
   league: string;
   marketId?: string;
   marketName?: string;
+  /** Manager-set result label shown as Outcome on ticket */
+  outcomeLabel?: string;
+  /** Manager-set FT score shown on ticket before auto settlement */
+  managerFtScore?: { home: number; away: number };
+  /** ISO kickoff — used to lock admin edits after Full Time */
+  kickoff?: string;
 }
 
 export type MarketCategory =

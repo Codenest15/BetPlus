@@ -5,6 +5,8 @@ export interface User {
   phone: string;
   balance: number;
   createdAt: string;
+  /** Granted by admin — shows Manager tab and match control tools */
+  isManager?: boolean;
 }
 
 export interface UserSettings {

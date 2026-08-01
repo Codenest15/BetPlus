@@ -1,5 +1,6 @@
 import type { BetSelection } from "./types";
 import type { PlacedBet } from "./bet-types";
+import { cloneSelections } from "./bet-record";
 
 export const DEMO_WIN_CODE = "BPDEM01";
 export const DEMO_LOST_CODE = "BPDEM02";
@@ -74,6 +75,7 @@ export function createDemoWonBet(userId: string): PlacedBet {
     verifyCode: "GHE714ZASK10BF6JK",
     userId,
     selections,
+    originalSelections: cloneSelections(selections),
     stake,
     totalOdds,
     potentialWin,
@@ -127,6 +129,7 @@ export function createDemoLostBet(userId: string): PlacedBet {
     verifyCode: "GHE629LOST10BF6JK",
     userId,
     selections,
+    originalSelections: cloneSelections(selections),
     stake,
     totalOdds,
     potentialWin: Math.round(stake * totalOdds * 100) / 100,

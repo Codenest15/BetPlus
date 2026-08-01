@@ -4,7 +4,7 @@ import { useBetSlip } from "@/lib/betslip-context";
 import { useAuth } from "@/lib/auth-context";
 import {
   generateSlipCode,
-  placeBet,
+  placeBetForUser,
   saveSharedSlipCode,
 } from "@/lib/bet-store";
 import { formatMoney, formatOdds } from "@/lib/utils";
@@ -22,7 +22,7 @@ interface BetSlipProps {
 export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
   const router = useRouter();
   const slipRef = useRef<HTMLElement>(null);
-  const { user, openLogin, deductBalance } = useAuth();
+  const { user, openLogin, refreshUser } = useAuth();
   const {
     selections,
     activeSelections,
@@ -50,6 +50,7 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
 
   const isSheet = variant === "sheet";
   const ticketsTab = slipTab === "bet-history" ? "bet-history" : "open-bets";
+  const showingTickets = slipTab === "open-bets" || slipTab === "bet-history";
 
   const balanceShortfall =
     user && betMode === "real" && totalStake > user.balance
@@ -87,20 +88,21 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
     }
 
     setPlacing(true);
-    const balanceError = deductBalance(totalStake);
-    if (balanceError) {
-      setError(balanceError);
-      setPlacing(false);
-      return;
-    }
-
-    const bet = placeBet({
+    const result = placeBetForUser({
       userId: user.id,
       selections: [...activeSelections],
       stake: totalStake,
       totalOdds,
       potentialWin,
     });
+    if ("error" in result) {
+      setError(result.error);
+      setPlacing(false);
+      return;
+    }
+
+    refreshUser();
+    const { bet } = result;
 
     clearSlip();
     setPlacing(false);
@@ -129,8 +131,12 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
       id="betslip"
       className={`betslip-panel flex flex-col overflow-hidden bg-surface ${
         isSheet
-          ? "max-h-[90vh] rounded-t-lg shadow-xl"
-          : "sticky top-[3.25rem] max-h-[calc(100vh-4.5rem)] rounded border border-border shadow-sm"
+          ? showingTickets
+            ? "h-[min(90vh,720px)] min-h-[70vh] rounded-t-lg shadow-xl"
+            : "max-h-[90vh] rounded-t-lg shadow-xl"
+          : showingTickets
+            ? "sticky top-[3.25rem] min-h-[28rem] max-h-[calc(100vh-4.5rem)] rounded border border-border shadow-sm"
+            : "sticky top-[3.25rem] max-h-[calc(100vh-4.5rem)] rounded border border-border shadow-sm"
       }`}
     >
       {isSheet && (
@@ -205,8 +211,8 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
         )}
       </div>
 
-      {slipTab === "open-bets" || slipTab === "bet-history" ? (
-        <div className="flex min-h-0 flex-1 flex-col">
+      {showingTickets ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <BetTicketsPanel
             activeTab={ticketsTab}
             onTabChange={(tab) => setSlipTab(tab)}
@@ -339,6 +345,19 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
 
               {/* Summary rows */}
               <div className="border-t border-brand-soft/80 text-xs">
+                {user && betMode === "real" && (
+                  <div className="flex items-center justify-between border-b border-brand-soft/60 bg-surface px-2.5 py-1.5">
+                    <span className="text-muted">Balance</span>
+                    <span className="font-semibold tabular-nums text-brand-dark">
+                      {formatMoney(user.balance)}
+                      {totalStake > 0 && totalStake <= user.balance && (
+                        <span className="ml-1.5 font-normal text-muted">
+                          → {formatMoney(user.balance - totalStake)} after stake
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-b border-brand-soft/60 bg-surface px-2.5 py-1.5">
                   <span className="text-muted">Total Odds</span>
                   <span className="font-semibold tabular-nums text-brand-dark">

@@ -18,6 +18,25 @@ function writeUsers(users: StoredUser[]) {
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
 }
 
+function emitBalanceUpdated(userId: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("betplus:balance-updated", { detail: { userId } }),
+  );
+}
+
+function emitUserUpdated(userId: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("betplus:user-updated", { detail: { userId } }),
+  );
+}
+
+function toPublicUser(stored: StoredUser): User {
+  const { password: _, settings: __, ...user } = stored;
+  return { ...user, isManager: user.isManager ?? false };
+}
+
 export function getSessionUserId(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(SESSION_KEY);
@@ -36,8 +55,82 @@ export function getCurrentUser(): User | null {
   if (!id) return null;
   const user = readUsers().find((u) => u.id === id);
   if (!user) return null;
-  const { password: _, settings: __, ...publicUser } = user;
-  return publicUser;
+  return toPublicUser(user);
+}
+
+export function getAllUsers(): User[] {
+  return readUsers().map(toPublicUser);
+}
+
+export function getUserById(userId: string): User | null {
+  const user = readUsers().find((u) => u.id === userId);
+  if (!user) return null;
+  return toPublicUser(user);
+}
+
+export function setUserBalance(
+  userId: string,
+  balance: number,
+): { user: User } | { error: string } {
+  const users = readUsers();
+  const index = users.findIndex((u) => u.id === userId);
+  if (index === -1) return { error: "User not found." };
+  if (balance < 0) return { error: "Balance cannot be negative." };
+
+  users[index].balance = Math.round(balance * 100) / 100;
+  writeUsers(users);
+  emitBalanceUpdated(userId);
+
+  return { user: toPublicUser(users[index]) };
+}
+
+/** Admin grants or revokes manager tools on a user account. */
+export function setUserManagerRole(
+  userId: string,
+  isManager: boolean,
+): { user: User } | { error: string } {
+  const users = readUsers();
+  const index = users.findIndex((u) => u.id === userId);
+  if (index === -1) return { error: "User not found." };
+
+  users[index].isManager = isManager;
+  writeUsers(users);
+  emitUserUpdated(userId);
+
+  return { user: toPublicUser(users[index]) };
+}
+
+/** Create a user if the email is not registered yet (demo / admin seed). */
+export function ensureUser(input: {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  balance?: number;
+}): User {
+  const users = readUsers();
+  const email = input.email.trim().toLowerCase();
+  const existing = users.find((u) => u.email === email);
+  if (existing) {
+    return toPublicUser(existing);
+  }
+
+  const stored: StoredUser = {
+    id: crypto.randomUUID(),
+    name: input.name.trim(),
+    email,
+    phone: input.phone.trim(),
+    password: input.password,
+    balance: input.balance ?? 50,
+    createdAt: new Date().toISOString(),
+    settings: DEFAULT_SETTINGS,
+    isManager: false,
+  };
+
+  users.push(stored);
+  writeUsers(users);
+
+  return toPublicUser(stored);
 }
 
 export function registerUser(input: {
@@ -69,14 +162,14 @@ export function registerUser(input: {
     balance: 50,
     createdAt: new Date().toISOString(),
     settings: DEFAULT_SETTINGS,
+    isManager: false,
   };
 
   users.push(stored);
   writeUsers(users);
   setSessionUserId(stored.id);
 
-  const { password: _, settings: __, ...user } = stored;
-  return { user };
+  return { user: toPublicUser(stored) };
 }
 
 export function loginUser(input: {
@@ -96,8 +189,7 @@ export function loginUser(input: {
   }
 
   setSessionUserId(found.id);
-  const { password: _, settings: __, ...user } = found;
-  return { user };
+  return { user: toPublicUser(found) };
 }
 
 export function logoutUser() {
@@ -126,9 +218,9 @@ export function updateUserProfile(
 
   users[index] = { ...current, ...updates };
   writeUsers(users);
+  emitUserUpdated(userId);
 
-  const { password: _, settings: __, ...user } = users[index];
-  return { user };
+  return { user: toPublicUser(users[index]) };
 }
 
 export function updateUserPassword(
@@ -182,7 +274,7 @@ export function updateUserBalance(
 
   users[index].balance = Math.round(newBalance * 100) / 100;
   writeUsers(users);
+  emitBalanceUpdated(userId);
 
-  const { password: _, settings: __, ...user } = users[index];
-  return { user };
+  return { user: toPublicUser(users[index]) };
 }

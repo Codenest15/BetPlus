@@ -4,18 +4,21 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { TicketDetails } from "@/components/TicketDetails";
+import { useAuth } from "@/lib/auth-context";
 import { getBetByCode } from "@/lib/bet-store";
 import type { PlacedBet } from "@/lib/bet-types";
 
 export default function BetTicketPage() {
   const params = useParams();
   const code = (params.code as string)?.toUpperCase();
+  const { refreshUser } = useAuth();
   const [bet, setBet] = useState<PlacedBet | null>(null);
 
   useEffect(() => {
     if (!code) return;
     setBet(getBetByCode(code));
-  }, [code]);
+    refreshUser();
+  }, [code, refreshUser]);
 
   if (!bet) {
     return (

@@ -1,10 +1,14 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { formatMoney } from "@/lib/utils";
 import { BetSlipTrigger } from "./BetSlipTrigger";
+
+/** Drop your PNG here: public/brand/logo.png */
+const LOGO_SRC = "/brand/logo.png";
 
 export function Header() {
   const pathname = usePathname();
@@ -13,8 +17,18 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-brand/20 bg-brand-dark text-white shadow-sm">
       <div className="mx-auto flex h-12 max-w-7xl items-center justify-between px-3">
-        <Link href="/" className="text-lg font-bold tracking-tight text-white">
-          BetPlus
+        <Link
+          href="/"
+          className="-ml-3 flex h-12 shrink-0 items-end overflow-hidden bg-white pl-3 pr-4 sm:pr-5"
+        >
+          <Image
+            src={LOGO_SRC}
+            alt="BetPlus"
+            width={480}
+            height={480}
+            priority
+            className="mb-px h-[3.25rem] w-auto max-w-none object-contain object-bottom sm:h-14"
+          />
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
