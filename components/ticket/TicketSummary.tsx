@@ -40,8 +40,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 }
 
 export function TicketSummary({ bet, onBetUpdate }: TicketSummaryProps) {
-  const { user } = useAuth();
-  const isManager = user?.isManager === true;
+  const { canManage } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
   const isWon = bet.status === "won";
   const isLost = bet.status === "lost";
@@ -66,10 +65,10 @@ export function TicketSummary({ bet, onBetUpdate }: TicketSummaryProps) {
         <button
           type="button"
           onClick={() => {
-            if (isManager) setEditOpen(true);
+            if (canManage) setEditOpen(true);
           }}
-          className={`w-full px-3 py-3 text-left ${isManager ? "cursor-pointer active:bg-white/5" : "cursor-default"}`}
-          aria-label={isManager ? "Edit ticket summary" : undefined}
+          className={`w-full px-3 py-3 text-left ${canManage ? "cursor-pointer active:bg-white/5" : "cursor-default"}`}
+          aria-label={canManage ? "Edit ticket summary" : undefined}
         >
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -121,7 +120,7 @@ export function TicketSummary({ bet, onBetUpdate }: TicketSummaryProps) {
       </button>
       </section>
 
-      {isManager && onBetUpdate && (
+      {canManage && onBetUpdate && (
         <ManagerEditPopup open={editOpen} onClose={() => setEditOpen(false)}>
           <ManagerTicketEditPanel
             bet={bet}

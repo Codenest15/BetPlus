@@ -21,8 +21,12 @@ import {
   updateUserBalance,
 } from "./auth-store";
 import { ensureDemoHistoryBets } from "./bet-store";
+import {
+  clearPendingReferralCode,
+  getPendingReferralCode,
+} from "./referral-store";
 import type { User, UserSettings } from "./user-types";
-import { DEFAULT_SETTINGS } from "./user-types";
+import { DEFAULT_SETTINGS, canUseManagerTools } from "./user-types";
 
 type AuthModal = "login" | "register" | null;
 
@@ -45,6 +49,9 @@ interface AuthContextValue {
   updateProfile: (updates: Partial<Pick<User, "name" | "email" | "phone">>) => string | null;
   changePassword: (current: string, next: string) => string | null;
   saveSettings: (settings: Partial<UserSettings>) => void;
+  /** Manager tools active (isManager + managerMode). */
+  canManage: boolean;
+  setManagerMode: (enabled: boolean) => void;
   refreshUser: () => void;
   deductBalance: (amount: number) => string | null;
 }
@@ -124,8 +131,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     (input: { name: string; email: string; phone: string; password: string }) => {
-      const result = registerUser(input);
+      const referralCode = getPendingReferralCode() ?? undefined;
+      const result = registerUser({ ...input, referralCode });
       if ("error" in result) return result.error;
+      clearPendingReferralCode();
       setUser(result.user);
       ensureDemoHistoryBets(result.user.id);
       setSettings(DEFAULT_SETTINGS);
@@ -170,6 +179,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [user],
   );
+
+  const setManagerMode = useCallback(
+    (enabled: boolean) => {
+      saveSettings({ managerMode: enabled });
+    },
+    [saveSettings],
+  );
+
+  const canManage = canUseManagerTools(user, settings);
 
   const refreshUser = useCallback(() => {
     const current = getCurrentUser();
@@ -229,6 +247,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       changePassword,
       saveSettings,
+      canManage,
+      setManagerMode,
       refreshUser,
       deductBalance,
     }),
@@ -243,6 +263,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       changePassword,
       saveSettings,
+      canManage,
+      setManagerMode,
       refreshUser,
       deductBalance,
     ],

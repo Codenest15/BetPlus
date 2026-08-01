@@ -2,17 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { adminLogin, DEFAULT_ADMIN } from "@/lib/admin-store";
+import { adminLogin } from "@/lib/admin-store";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState(DEFAULT_ADMIN.email);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (adminLogin(email, password)) {
+    setError("");
+    setLoading(true);
+    const ok = await adminLogin(email, password);
+    setLoading(false);
+    if (ok) {
       router.push("/admin");
     } else {
       setError("Invalid admin credentials");
@@ -27,7 +32,7 @@ export default function AdminLoginPage() {
       >
         <h1 className="text-lg font-bold text-brand-dark">Admin login</h1>
         <p className="mt-1 text-xs text-muted">
-          Separate from user accounts. Operations are logged.
+          Authorized staff only. Credentials are not stored in the app code.
         </p>
 
         <label className="mt-4 block">
@@ -36,7 +41,9 @@ export default function AdminLoginPage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
             className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-brand"
+            required
           />
         </label>
 
@@ -46,7 +53,9 @@ export default function AdminLoginPage() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
             className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-brand"
+            required
           />
         </label>
 
@@ -54,14 +63,11 @@ export default function AdminLoginPage() {
 
         <button
           type="submit"
-          className="mt-4 w-full rounded-md bg-brand py-2 text-sm font-semibold text-white hover:bg-brand-dark"
+          disabled={loading}
+          className="mt-4 w-full rounded-md bg-brand py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
         >
-          Sign in
+          {loading ? "Signing in…" : "Sign in"}
         </button>
-
-        <p className="mt-3 text-center text-[10px] text-muted">
-          Demo: {DEFAULT_ADMIN.email} / {DEFAULT_ADMIN.password}
-        </p>
       </form>
     </div>
   );

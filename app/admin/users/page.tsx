@@ -8,6 +8,7 @@ import { logAdminAction } from "@/lib/admin-store";
 import { getAllUsers, setUserManagerRole, updateUserBalance } from "@/lib/auth-store";
 import { addTransaction } from "@/lib/bet-store";
 import { recordAdminCredit } from "@/lib/platform-store";
+import { trackReferralDeposit } from "@/lib/referral-store";
 import { seedUser1DemoSlip } from "@/lib/demo-seed";
 import type { PlacedBet } from "@/lib/bet-types";
 import type { User } from "@/lib/user-types";
@@ -50,7 +51,7 @@ export default function AdminUsersPage() {
       return;
     }
 
-    addTransaction({
+    const tx = addTransaction({
       userId: creditUserId,
       type: "deposit",
       amount,
@@ -61,6 +62,7 @@ export default function AdminUsersPage() {
       amount,
       creditNote.trim() || "Admin credit",
     );
+    trackReferralDeposit(creditUserId, amount, tx.id);
 
     const user = result.user;
     logAdminAction(

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { addTransaction, getTransactionsByUser } from "@/lib/bet-store";
 import { recordUserDeposit, recordUserWithdrawal } from "@/lib/platform-store";
+import { trackReferralDeposit } from "@/lib/referral-store";
 import { updateUserBalance } from "@/lib/auth-store";
 import {
   DEPOSIT_METHODS,
@@ -129,8 +130,9 @@ export default function WalletPage() {
       setError(result.error);
       return false;
     }
-    addTransaction({ userId, type: "deposit", amount, description });
+    const tx = addTransaction({ userId, type: "deposit", amount, description });
     recordUserDeposit(userId, amount, description);
+    trackReferralDeposit(userId, amount, tx.id);
     refreshUser();
     setCryptoStep(false);
     setMessage(`Deposited ${formatMoney(amount)} successfully`);

@@ -1,5 +1,5 @@
 import type { StoredUser, User, UserSettings } from "./user-types";
-import { DEFAULT_SETTINGS } from "./user-types";
+import { DEFAULT_SETTINGS, normalizeUserSettings } from "./user-types";
 
 const USERS_KEY = "betplus_users";
 const SESSION_KEY = "betplus_session";
@@ -30,6 +30,57 @@ function emitUserUpdated(userId: string) {
   window.dispatchEvent(
     new CustomEvent("betplus:user-updated", { detail: { userId } }),
   );
+}
+
+function generateReferralCode(name: string, userId: string): string {
+  const prefix =
+    name
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .slice(0, 4)
+      .toUpperCase() || "MGR";
+  const suffix = userId.replace(/-/g, "").slice(0, 4).toUpperCase();
+  return `${prefix}${suffix}`;
+}
+
+function isReferralCodeTaken(code: string, exceptUserId?: string): boolean {
+  return readUsers().some(
+    (user) =>
+      user.referralCode?.toUpperCase() === code.toUpperCase() &&
+      user.id !== exceptUserId,
+  );
+}
+
+export function ensureManagerReferralCode(userId: string): string | null {
+  const users = readUsers();
+  const index = users.findIndex((u) => u.id === userId);
+  if (index === -1) return null;
+  if (!users[index].isManager) return null;
+  if (users[index].referralCode) return users[index].referralCode!;
+
+  let code = generateReferralCode(users[index].name, users[index].id);
+  let attempt = 0;
+  while (isReferralCodeTaken(code, userId) && attempt < 20) {
+    code = `${generateReferralCode(users[index].name, users[index].id)}${attempt + 1}`;
+    attempt += 1;
+  }
+
+  users[index].referralCode = code;
+  writeUsers(users);
+  emitUserUpdated(userId);
+
+  return code;
+}
+
+export function findManagerByReferralCode(code: string): User | null {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return null;
+
+  const manager = readUsers().find(
+    (user) =>
+      user.isManager === true &&
+      user.referralCode?.toUpperCase() === normalized,
+  );
+  return manager ? toPublicUser(manager) : null;
 }
 
 function toPublicUser(stored: StoredUser): User {
@@ -95,9 +146,15 @@ export function setUserManagerRole(
 
   users[index].isManager = isManager;
   writeUsers(users);
+  if (isManager) {
+    ensureManagerReferralCode(userId);
+  }
   emitUserUpdated(userId);
 
-  return { user: toPublicUser(users[index]) };
+  const updated = readUsers().find((u) => u.id === userId);
+  if (!updated) return { error: "User not found." };
+
+  return { user: toPublicUser(updated) };
 }
 
 /** Create a user if the email is not registered yet (demo / admin seed). */
@@ -138,6 +195,7 @@ export function registerUser(input: {
   email: string;
   phone: string;
   password: string;
+  referralCode?: string;
 }): { user: User } | { error: string } {
   const users = readUsers();
   const email = input.email.trim().toLowerCase();
@@ -153,6 +211,14 @@ export function registerUser(input: {
     return { error: "Password must be at least 6 characters." };
   }
 
+  let referredByManagerId: string | undefined;
+  if (input.referralCode) {
+    const manager = findManagerByReferralCode(input.referralCode);
+    if (manager) {
+      referredByManagerId = manager.id;
+    }
+  }
+
   const stored: StoredUser = {
     id: crypto.randomUUID(),
     name: input.name.trim(),
@@ -163,6 +229,7 @@ export function registerUser(input: {
     createdAt: new Date().toISOString(),
     settings: DEFAULT_SETTINGS,
     isManager: false,
+    referredByManagerId,
   };
 
   users.push(stored);
@@ -251,14 +318,17 @@ export function updateUserSettings(
   const index = users.findIndex((u) => u.id === userId);
   if (index === -1) return null;
 
-  users[index].settings = { ...users[index].settings, ...settings };
+  users[index].settings = normalizeUserSettings({
+    ...users[index].settings,
+    ...settings,
+  });
   writeUsers(users);
   return users[index].settings;
 }
 
 export function getUserSettings(userId: string): UserSettings | null {
   const user = readUsers().find((u) => u.id === userId);
-  return user?.settings ?? null;
+  return user ? normalizeUserSettings(user.settings) : null;
 }
 
 export function updateUserBalance(

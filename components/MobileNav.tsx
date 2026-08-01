@@ -40,7 +40,7 @@ const TABS = [
     id: "me",
     href: "/account",
     label: "Me",
-    match: ["/account", "/manager"],
+    match: ["/account"],
     icon: MeIcon,
     requiresAuth: true,
   },

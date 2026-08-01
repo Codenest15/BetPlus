@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { AuthProvider } from "@/lib/auth-context";
 import { BetSlipProvider } from "@/lib/betslip-context";
 import { AuthModal } from "./AuthModal";
+import { ReferralCapture } from "./ReferralCapture";
 import { BetSlip } from "./BetSlip";
 import { BetSlipBar } from "./BetSlipBar";
 import { BetSlipSheet } from "./BetSlipSheet";
@@ -26,6 +27,7 @@ function TicketPageShell({ children }: { children: React.ReactNode }) {
       <MobileNav />
       <BetSlipSheet />
       <AuthModal />
+      <ReferralCapture />
     </>
   );
 }
@@ -45,6 +47,7 @@ function DefaultShell({ children }: { children: React.ReactNode }) {
       <BetSlipBar />
       <BetSlipSheet />
       <AuthModal />
+      <ReferralCapture />
     </>
   );
 }

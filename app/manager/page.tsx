@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ManagerGate } from "@/components/manager/ManagerGate";
+import { ManagerReferralsPanel } from "@/components/manager/ManagerReferralsPanel";
 import {
   listManagerMatches,
   MANAGER_STATUS_LABELS,
@@ -25,8 +26,8 @@ export default function ManagerHomePage() {
         <div>
           <h1 className="page-title">Manager</h1>
           <p className="mt-0.5 text-xs text-muted">
-            Same app as everyone else — bet, wallet, and open bets. Open Manager from
-            Me when admin registers you.
+            Enable Manager Mode in Profile to access match control and ticket
+            editing.
           </p>
         </div>
 
@@ -48,6 +49,8 @@ export default function ManagerHomePage() {
             </p>
           </div>
         </div>
+
+        <ManagerReferralsPanel />
 
         <div className="flex flex-wrap gap-2">
           <Link

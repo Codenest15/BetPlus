@@ -1,29 +1,3 @@
-const ADMIN_SESSION_KEY = "betplus_admin_session";
-
-/** Demo admin — change before production */
-export const DEFAULT_ADMIN = {
-  email: "admin@betplus.com",
-  password: "admin123",
-  name: "BetPlus Admin",
-};
-
-export function isAdminLoggedIn(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(ADMIN_SESSION_KEY) === "active";
-}
-
-export function adminLogin(email: string, password: string): boolean {
-  const ok =
-    email.trim().toLowerCase() === DEFAULT_ADMIN.email &&
-    password === DEFAULT_ADMIN.password;
-  if (ok) localStorage.setItem(ADMIN_SESSION_KEY, "active");
-  return ok;
-}
-
-export function adminLogout() {
-  localStorage.removeItem(ADMIN_SESSION_KEY);
-}
-
 export interface AdminAuditEntry {
   id: string;
   action: string;
@@ -34,6 +8,45 @@ export interface AdminAuditEntry {
 }
 
 const AUDIT_KEY = "betplus_admin_audit";
+
+export async function checkAdminSession(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const res = await fetch("/api/admin/session", { credentials: "include" });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { authenticated?: boolean };
+    return data.authenticated === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function adminLogin(email: string, password: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const res = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, password }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function adminLogout(): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    await fetch("/api/admin/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch {
+    /* ignore */
+  }
+}
 
 export function logAdminAction(
   action: string,

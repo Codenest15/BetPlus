@@ -191,8 +191,8 @@ interface TicketLegListProps {
 }
 
 export function TicketLegList({ bet, legs, onBetUpdate }: TicketLegListProps) {
-  const { user } = useAuth();
-  const canEdit = user?.isManager === true && !!onBetUpdate;
+  const { canManage } = useAuth();
+  const canEdit = canManage && !!onBetUpdate;
 
   return (
     <ul>

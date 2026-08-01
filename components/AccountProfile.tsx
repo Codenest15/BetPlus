@@ -10,7 +10,7 @@ import { CURRENCY_SYMBOL, formatMoney } from "@/lib/utils";
 
 interface AccountProfileProps {
   user: User;
-  onOpenSettings: () => void;
+  onOpenSettings: (tab?: "profile" | "password" | "preferences") => void;
   onLogout: () => void;
 }
 
@@ -19,14 +19,6 @@ const QUICK_LINKS: { label: string; href: string; icon: IconId }[] = [
   { label: "Wallet", href: "/wallet", icon: "wallet" },
   { label: "Promotions", href: "/promotions", icon: "promotions" },
 ];
-
-function managerQuickLink(isManager: boolean | undefined) {
-  if (!isManager) return QUICK_LINKS;
-  return [
-    { label: "Manager", href: "/manager", icon: "booking-code" as IconId },
-    ...QUICK_LINKS,
-  ];
-}
 
 const MENU_ITEMS: {
   label: string;
@@ -61,20 +53,20 @@ export function AccountProfile({
             <div>
               <button
                 type="button"
-                onClick={onOpenSettings}
+                onClick={() => onOpenSettings("profile")}
                 className="flex items-center gap-1 text-base font-semibold"
               >
                 {username}
                 <ChevronRight />
               </button>
               <span className="mt-1 inline-block rounded bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/80">
-                {user.isManager ? "Manager" : "Loyalty Tier"}
+                Loyalty Tier
               </span>
             </div>
           </div>
           <button
             type="button"
-            onClick={onOpenSettings}
+            onClick={() => onOpenSettings("profile")}
             className="text-white/80 hover:text-white"
             aria-label="Settings"
           >
@@ -133,7 +125,7 @@ export function AccountProfile({
         </div>
 
         <div className="mt-4 grid grid-cols-3 gap-2">
-          {managerQuickLink(user.isManager).map((item) => (
+          {QUICK_LINKS.map((item) => (
             <Link
               key={item.label}
               href={item.href}
@@ -147,21 +139,6 @@ export function AccountProfile({
           ))}
         </div>
       </div>
-
-      {user.isManager && (
-        <Link
-          href="/manager"
-          className="mx-4 -mt-2 mb-2 flex items-center justify-between rounded-lg border border-brand/30 bg-brand-light px-4 py-3 shadow-sm"
-        >
-          <div>
-            <p className="text-sm font-semibold text-brand-dark">Manager tools</p>
-            <p className="text-[11px] text-muted">Update match results</p>
-          </div>
-          <span className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white">
-            Open
-          </span>
-        </Link>
-      )}
 
       <div className="rounded-t-2xl bg-surface text-foreground">
         <ul className="divide-y divide-border">
@@ -183,7 +160,18 @@ export function AccountProfile({
           <li>
             <button
               type="button"
-              onClick={onOpenSettings}
+              onClick={() => onOpenSettings("profile")}
+              className="flex w-full items-center gap-3 px-4 py-4 text-left"
+            >
+              <AppIcon name="profile" size={24} className="opacity-70" />
+              <span className="flex-1 text-sm font-medium">Profile</span>
+              <ChevronRight className="text-muted" />
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              onClick={() => onOpenSettings("preferences")}
               className="flex w-full items-center gap-3 px-4 py-4 text-left"
             >
               <AppIcon name="settings" size={24} className="opacity-70" />

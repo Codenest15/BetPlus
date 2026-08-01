@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import {
+  findManagerByReferralCode,
+  getPendingReferralCode,
+} from "@/lib/referral-store";
 
 export function AuthModal() {
   const { authModal, closeAuthModal, login, register, openLogin, openRegister } =
@@ -127,6 +131,17 @@ function RegisterForm({
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [referrerName, setReferrerName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const code = getPendingReferralCode();
+    if (!code) {
+      setReferrerName(null);
+      return;
+    }
+    const manager = findManagerByReferralCode(code);
+    setReferrerName(manager?.name ?? null);
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -138,6 +153,12 @@ function RegisterForm({
       <div>
         <h2 className="text-xl font-bold">Create Account</h2>
         <p className="mt-1 text-sm text-muted">Join BetPlus — get GH₵50 welcome balance</p>
+        {referrerName && (
+          <p className="mt-2 rounded-md bg-brand-light px-3 py-2 text-xs text-brand-dark">
+            Referred by <strong>{referrerName}</strong>. Your account will be
+            linked to their invitation.
+          </p>
+        )}
       </div>
 
       <Field label="Full name" value={name} onChange={setName} placeholder="John Doe" required />

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { adminLogout, isAdminLoggedIn } from "@/lib/admin-store";
+import { adminLogout, checkAdminSession } from "@/lib/admin-store";
 import { seedUser1DemoSlip } from "@/lib/demo-seed";
 
 export function AdminGate({ children }: { children: ReactNode }) {
@@ -11,12 +11,23 @@ export function AdminGate({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!isAdminLoggedIn()) {
-      router.replace("/admin/login");
-      return;
+    let cancelled = false;
+
+    async function verify() {
+      const authenticated = await checkAdminSession();
+      if (cancelled) return;
+      if (!authenticated) {
+        router.replace("/admin/login");
+        return;
+      }
+      seedUser1DemoSlip();
+      setReady(true);
     }
-    seedUser1DemoSlip();
-    setReady(true);
+
+    verify();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   if (!ready) {
@@ -41,6 +52,9 @@ export function AdminGate({ children }: { children: ReactNode }) {
             <Link href="/admin/users" className="text-white/80 hover:text-white">
               Users
             </Link>
+            <Link href="/admin/managers" className="text-white/80 hover:text-white">
+              Managers
+            </Link>
             <Link href="/admin/bets" className="text-white/80 hover:text-white">
               Bets
             </Link>
@@ -49,8 +63,8 @@ export function AdminGate({ children }: { children: ReactNode }) {
             </Link>
             <button
               type="button"
-              onClick={() => {
-                adminLogout();
+              onClick={async () => {
+                await adminLogout();
                 router.push("/admin/login");
               }}
               className="rounded bg-white/10 px-2 py-1 hover:bg-white/15"

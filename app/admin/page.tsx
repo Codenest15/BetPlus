@@ -11,6 +11,7 @@ import { getPlatformStats, getPlatformLedger } from "@/lib/platform-store";
 import { seedUser1DemoSlip } from "@/lib/demo-seed";
 import type { PlacedBet } from "@/lib/bet-types";
 import type { User } from "@/lib/user-types";
+import { getAllManagersReferralOverview } from "@/lib/referral-store";
 import { formatMoney } from "@/lib/utils";
 
 export default function AdminDashboardPage() {
@@ -50,6 +51,15 @@ export default function AdminDashboardPage() {
 
   const recentAudit = getAdminAuditLog().slice(0, 5);
   const platformLedger = getPlatformLedger().slice(0, 8);
+  const managerOverview = getAllManagersReferralOverview();
+  const referralGross = managerOverview.reduce(
+    (sum, row) => sum + row.grossRevenue,
+    0,
+  );
+  const referralSignups = managerOverview.reduce(
+    (sum, row) => sum + row.signupCount,
+    0,
+  );
 
   return (
     <AdminGate>
@@ -114,6 +124,12 @@ export default function AdminDashboardPage() {
                 Manage users
               </Link>
               <Link
+                href="/admin/managers"
+                className="rounded-md border border-brand px-3 py-1.5 text-xs font-medium text-brand"
+              >
+                Manager referrals
+              </Link>
+              <Link
                 href="/admin/bets"
                 className="rounded-md border border-brand px-3 py-1.5 text-xs font-medium text-brand"
               >
@@ -128,6 +144,21 @@ export default function AdminDashboardPage() {
                 </Link>
               )}
             </div>
+          </section>
+
+          <section className="card p-3">
+            <h2 className="section-label mb-2">Manager referrals</h2>
+            <p className="text-xs text-muted">
+              {managerOverview.length} manager
+              {managerOverview.length === 1 ? "" : "s"} · {referralSignups}{" "}
+              referral signups · {formatMoney(referralGross)} gross revenue
+            </p>
+            <Link
+              href="/admin/managers"
+              className="mt-2 inline-block text-xs font-medium text-brand hover:underline"
+            >
+              View all managers →
+            </Link>
           </section>
 
           <section className="card p-3">
