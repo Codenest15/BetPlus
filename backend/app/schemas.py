@@ -67,3 +67,22 @@ class TransactionOut(BaseModel):
 class WalletOp(BaseModel):
     amount: float
     description: str | None = None
+
+
+class BetCreate(BaseModel):
+    stake: float
+    odds: float
+
+
+class BetOut(BaseModel):
+    id: int
+    user_id: int
+    stake: float
+    odds: float
+    status: str
+    payout: float | None = None
+    created_at: str
+    settled_at: str | None = None
+
+    class Config:
+        orm_mode = True
