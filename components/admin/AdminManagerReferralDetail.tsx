@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   MANAGER_REFERRAL_SHARE,
@@ -13,6 +12,8 @@ import {
   type ReferralDeposit,
 } from "@/lib/referral-store";
 import type { User } from "@/lib/user-types";
+import { adminGetReferralDetail, useBackendApi } from "@/lib/backend-client";
+import { backendReferralStatsToLocal } from "@/lib/backend-mappers";
 import { formatMoney } from "@/lib/utils";
 
 interface AdminManagerReferralDetailProps {
@@ -48,13 +49,23 @@ function CopyLinkButton({ value }: { value: string }) {
 export function AdminManagerReferralDetail({
   manager,
 }: AdminManagerReferralDetailProps) {
+  const backendMode = useBackendApi();
   const [stats, setStats] = useState<ManagerReferralStats | null>(null);
   const [deposits, setDeposits] = useState<ReferralDeposit[]>([]);
 
   useEffect(() => {
-    setStats(getManagerReferralStats(manager.id, "", "admin"));
-    setDeposits(getManagerReferralDeposits(manager.id));
-  }, [manager.id]);
+    async function load() {
+      if (backendMode) {
+        const remote = await adminGetReferralDetail(manager.id);
+        setStats(backendReferralStatsToLocal(remote, "admin"));
+        setDeposits([]);
+        return;
+      }
+      setStats(getManagerReferralStats(manager.id, "", "admin"));
+      setDeposits(getManagerReferralDeposits(manager.id));
+    }
+    void load();
+  }, [backendMode, manager.id]);
 
   if (!stats) {
     return <p className="text-sm text-muted">Loading manager data…</p>;

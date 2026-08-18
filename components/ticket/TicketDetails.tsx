@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useBetSlip } from "@/lib/betslip-context";
 import type { PlacedBet } from "@/lib/bet-types";
 import { isDemoBetCode } from "@/lib/demo-bets";
-import { updateBetStatus } from "@/lib/bet-store";
 import {
   getLegDisplays,
   ticketId,
@@ -97,8 +96,7 @@ export function TicketDetails({ bet, onBetUpdate }: TicketDetailsProps) {
               <button
                 type="button"
                 onClick={() => {
-                  const u = updateBetStatus(bet.id, "won");
-                  if (u) onBetUpdate(u);
+                  onBetUpdate({ ...bet, status: "won" });
                 }}
                 className="rounded border border-accent px-3 py-1.5 text-xs font-semibold text-accent"
               >
@@ -107,8 +105,7 @@ export function TicketDetails({ bet, onBetUpdate }: TicketDetailsProps) {
               <button
                 type="button"
                 onClick={() => {
-                  const u = updateBetStatus(bet.id, "lost");
-                  if (u) onBetUpdate(u);
+                  onBetUpdate({ ...bet, status: "lost" });
                 }}
                 className="rounded border border-live px-3 py-1.5 text-xs font-semibold text-live"
               >

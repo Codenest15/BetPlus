@@ -9,6 +9,7 @@ from app.core.codes import generate_booking_code, generate_ticket_id, generate_v
 from app.core.money import to_decimal
 from app.models.bet import Bet, BetSelection
 from app.models.game import Game
+from app.services.ledger_service import LedgerService
 from app.services.wallet_service import InsufficientBalanceError, WalletService
 
 
@@ -302,30 +303,7 @@ class SettlementService:
         return "won" if lost_count == 0 else "lost"
 
     @staticmethod
-    def settle_bet(db: Session, bet: Bet) -> Bet:
-        if bet.status != "open":
-            return bet
-
-        leg_results: list[dict] = list(bet.leg_results or [])
-        for selection in bet.selections:
-            if any(r.get("legIndex") == selection.leg_index for r in leg_results):
-                continue
-            evaluated = SettlementService.evaluate_leg(db, selection)
-            if evaluated:
-                leg_results.append(evaluated)
-
-        status = SettlementService.derive_status(bet, leg_results)
-        if not status:
-            bet.leg_results = leg_results
-            db.add(bet)
-            db.commit()
-            db.refresh(bet)
-            return bet
-
-        bet.leg_results = leg_results
-        bet.status = status
-        bet.settled_at = datetime.now(timezone.utc)
-
+    def apply_financial_settlement(db: Session, bet: Bet, status: str) -> None:
         stake = to_decimal(bet.stake)
         if status == "won":
             payout = to_decimal(bet.potential_win) + to_decimal(bet.bonus)
@@ -336,6 +314,15 @@ class SettlementService:
                 payout,
                 bet.id,
                 f"Winnings {bet.booking_code}",
+            )
+            net_profit = payout - stake
+            LedgerService.record(
+                db,
+                entry_type="payout",
+                amount=-net_profit,
+                description=f"Winnings {bet.booking_code}",
+                user_id=bet.user_id,
+                bet_id=bet.id,
             )
         elif status == "void":
             bet.payout = stake
@@ -348,22 +335,157 @@ class SettlementService:
             )
         else:
             bet.payout = Decimal("0")
+            LedgerService.record(
+                db,
+                entry_type="stake_retained",
+                amount=stake,
+                description=f"Lost bet {bet.booking_code} — stake retained",
+                user_id=bet.user_id,
+                bet_id=bet.id,
+            )
+
+    @staticmethod
+    def settle_bet(
+        db: Session,
+        bet: Bet,
+        force_status: str | None = None,
+        commit: bool = True,
+    ) -> Bet:
+        if bet.status != "open":
+            return bet
+
+        if force_status:
+            if force_status not in ("won", "lost", "void"):
+                raise ValueError("Invalid settlement status")
+            status = force_status
+            leg_results: list[dict] = list(bet.leg_results or [])
+        else:
+            leg_results = list(bet.leg_results or [])
+            for selection in bet.selections:
+                if any(r.get("legIndex") == selection.leg_index for r in leg_results):
+                    continue
+                evaluated = SettlementService.evaluate_leg(db, selection)
+                if evaluated:
+                    leg_results.append(evaluated)
+
+            status = SettlementService.derive_status(bet, leg_results)
+            if not status:
+                bet.leg_results = leg_results
+                db.add(bet)
+                if commit:
+                    db.commit()
+                    db.refresh(bet)
+                return bet
+
+        bet.leg_results = leg_results
+        bet.status = status
+        bet.settled_at = datetime.now(timezone.utc)
+        SettlementService.apply_financial_settlement(db, bet, status)
 
         db.add(bet)
-        db.commit()
-        db.refresh(bet)
+        if commit:
+            db.commit()
+            db.refresh(bet)
         return bet
 
     @staticmethod
-    def run_open_bets(db: Session, limit: int = 50) -> list[Bet]:
-        open_bets = (
-            db.query(Bet)
-            .filter(Bet.status == "open")
-            .order_by(Bet.placed_at)
-            .limit(limit)
-            .all()
-        )
+    def run_open_bets(
+        db: Session, limit: int = 50, match_id: str | None = None
+    ) -> list[Bet]:
+        q = db.query(Bet).filter(Bet.status == "open")
+        if match_id:
+            q = q.join(BetSelection).filter(BetSelection.match_id == match_id)
+        open_bets = q.order_by(Bet.placed_at).limit(limit).all()
         settled: list[Bet] = []
         for bet in open_bets:
-            settled.append(SettlementService.settle_bet(db, bet))
+            settled.append(SettlementService.settle_bet(db, bet, commit=True))
         return settled
+
+    @staticmethod
+    def update_leg(
+        db: Session,
+        bet: Bet,
+        leg_index: int,
+        *,
+        selection: str | None = None,
+        selection_label: str | None = None,
+        odds: float | None = None,
+        market_id: str | None = None,
+        market_name: str | None = None,
+        outcome_label: str | None = None,
+        manager_ft_score: dict | None = None,
+        outcome_status: str | None = None,
+        clear_ft_score: bool = False,
+    ) -> Bet:
+        if bet.status != "open":
+            raise ValueError("Cannot edit a settled bet")
+
+        target = next((s for s in bet.selections if s.leg_index == leg_index), None)
+        if target is None:
+            raise ValueError("Leg not found")
+
+        if selection is not None:
+            target.selection = selection
+        if selection_label is not None:
+            target.selection_label = selection_label
+        if odds is not None:
+            if odds <= 0:
+                raise ValueError("Odds must be positive")
+            target.odds = to_decimal(odds)
+        if market_id is not None:
+            target.market_id = market_id
+        if market_name is not None:
+            target.market_name = market_name
+        if outcome_label is not None:
+            target.outcome_label = outcome_label
+        if clear_ft_score:
+            target.manager_ft_score = None
+        elif manager_ft_score is not None:
+            target.manager_ft_score = manager_ft_score
+
+        total_odds = Decimal("1")
+        for sel in bet.selections:
+            total_odds *= to_decimal(sel.odds)
+        bet.total_odds = total_odds
+        bet.potential_win = (to_decimal(bet.stake) * total_odds).quantize(
+            Decimal("0.01")
+        )
+        bet.bonus = (
+            (to_decimal(bet.potential_win) * Decimal("0.04")).quantize(Decimal("0.01"))
+            if len(bet.selections) >= 3
+            else Decimal("0")
+        )
+
+        leg_results: list[dict] = list(bet.leg_results or [])
+        result_idx = next(
+            (
+                i
+                for i, r in enumerate(leg_results)
+                if r.get("legIndex") == leg_index
+            ),
+            None,
+        )
+        if outcome_status in (None, "not_started"):
+            if result_idx is not None:
+                leg_results.pop(result_idx)
+        elif outcome_status in ("won", "lost", "void"):
+            home = 0
+            away = 0
+            if target.manager_ft_score:
+                home = int(target.manager_ft_score.get("home", 0))
+                away = int(target.manager_ft_score.get("away", 0))
+            entry = {
+                "legIndex": leg_index,
+                "homeScore": home,
+                "awayScore": away,
+                "won": outcome_status == "won",
+                "void": outcome_status == "void",
+            }
+            if result_idx is not None:
+                leg_results[result_idx] = entry
+            else:
+                leg_results.append(entry)
+        bet.leg_results = leg_results
+        db.add(bet)
+        db.flush()
+        return SettlementService.settle_bet(db, bet, commit=True)

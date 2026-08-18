@@ -9,7 +9,7 @@ import { getBetByCode, getBetByVerifyCode } from "./bet-store";
 import {
   getBetByCode as apiGetBetByCode,
   getBetByVerifyCode as apiGetBetByVerifyCode,
-  useBackendApi,
+  isBackendEnabled,
 } from "./backend-client";
 import { backendBetToPlacedBet } from "./backend-mappers";
 import {
@@ -73,7 +73,7 @@ export async function lookupTicketVerificationAsync(
   const normalized = code.trim().toUpperCase();
   if (!normalized) return null;
 
-  if (useBackendApi()) {
+  if (isBackendEnabled()) {
     try {
       const byVerify = await apiGetBetByVerifyCode(normalized);
       return backendBetToPlacedBet(byVerify);

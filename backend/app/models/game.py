@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.sql import func
 
 from app.db.base import Base
@@ -24,4 +24,10 @@ class Game(Base):
     odds_draw = Column(Numeric(12, 4), nullable=True)
     odds_away = Column(Numeric(12, 4), nullable=True)
     manager_status = Column(String(32), nullable=True)
+    manager_controlled = Column(Boolean, default=False, nullable=False)
+    manager_note = Column(Text, nullable=True)
+    is_manual = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

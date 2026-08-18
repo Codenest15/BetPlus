@@ -65,6 +65,6 @@ app.include_router(v1_bets.router, prefix="/api/bets", tags=["bets-legacy"])
 app.include_router(v1_catalog.router, prefix="/api/catalog", tags=["catalog-legacy"])
 app.include_router(
     v1_admin.router,
-    prefix="/api/admin/settlement",
+    prefix="/api/admin",
     tags=["admin-legacy"],
 )

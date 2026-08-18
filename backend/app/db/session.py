@@ -9,12 +9,14 @@ from app.db.base import Base
 
 def _build_engine():
     settings = get_settings()
-    connect_args = (
-        {"check_same_thread": False}
-        if settings.database_url.startswith("sqlite")
-        else {}
+    is_sqlite = settings.database_url.startswith("sqlite")
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
+    kwargs: dict = {}
+    if not is_sqlite:
+        kwargs["pool_pre_ping"] = True
+    return create_engine(
+        settings.database_url, connect_args=connect_args, **kwargs
     )
-    return create_engine(settings.database_url, connect_args=connect_args)
 
 
 engine = _build_engine()

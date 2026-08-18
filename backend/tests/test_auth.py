@@ -43,3 +43,73 @@ def test_login_with_phone(client):
         data={"username": "+233209998877", "password": "secret"},
     )
     assert resp.status_code == 200
+
+
+def test_update_profile_and_password(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Profile User",
+            "email": "profile@example.com",
+            "password": "secret",
+        },
+    )
+    token = client.post(
+        "/api/v1/auth/login",
+        data={"username": "profile@example.com", "password": "secret"},
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = client.patch(
+        "/api/v1/auth/me",
+        json={"name": "Updated Name", "phone": "+233200000111"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Updated Name"
+    assert resp.json()["phone"] == "+233200000111"
+
+    bad = client.post(
+        "/api/v1/auth/me/password",
+        json={"current_password": "wrong", "new_password": "newsecret"},
+        headers=headers,
+    )
+    assert bad.status_code == 400
+
+    ok = client.post(
+        "/api/v1/auth/me/password",
+        json={"current_password": "secret", "new_password": "newsecret"},
+        headers=headers,
+    )
+    assert ok.status_code == 200
+    assert "hashed_password" not in ok.json()
+
+    relogin = client.post(
+        "/api/v1/auth/login",
+        data={"username": "profile@example.com", "password": "newsecret"},
+    )
+    assert relogin.status_code == 200
+
+
+def test_settings_persist(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={"name": "Settings User", "email": "settings@example.com", "password": "secret"},
+    )
+    token = client.post(
+        "/api/v1/auth/login",
+        data={"username": "settings@example.com", "password": "secret"},
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = client.patch(
+        "/api/v1/auth/me/settings",
+        json={"managerMode": True, "oddsFormat": "fractional"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["settings"]["managerMode"] is True
+    assert resp.json()["settings"]["oddsFormat"] == "fractional"
+
+    me = client.get("/api/v1/auth/me", headers=headers).json()
+    assert me["settings"]["managerMode"] is True

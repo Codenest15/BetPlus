@@ -10,13 +10,17 @@ import {
   type ReactNode,
 } from "react";
 import {
+  changePassword as apiChangePassword,
   fetchCurrentUser,
   loginUser as apiLogin,
   registerUser as apiRegister,
   setAccessToken,
+  updateProfile as apiUpdateProfile,
+  updateSettings as apiUpdateSettings,
   useBackendApi,
   type BackendUser,
 } from "./backend-client";
+import { backendUserToLocal } from "./backend-mappers";
 import {
   getCurrentUser,
   getUserSettings,
@@ -54,8 +58,8 @@ interface AuthContextValue {
     password: string;
   }) => Promise<string | null>;
   logout: () => void;
-  updateProfile: (updates: Partial<Pick<User, "name" | "email" | "phone">>) => string | null;
-  changePassword: (current: string, next: string) => string | null;
+  updateProfile: (updates: Partial<Pick<User, "name" | "email" | "phone">>) => Promise<string | null>;
+  changePassword: (current: string, next: string) => Promise<string | null>;
   saveSettings: (settings: Partial<UserSettings>) => void;
   canManage: boolean;
   setManagerMode: (enabled: boolean) => void;
@@ -66,17 +70,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function backendToUser(u: BackendUser): User {
-  return {
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    phone: u.phone ?? "",
-    balance: u.balance,
-    createdAt: u.created_at,
-    isManager: u.is_manager,
-    referralCode: u.referral_code ?? undefined,
-    referredByManagerId: u.referred_by_manager_id ?? undefined,
-  };
+  return backendUserToLocal(u);
 }
 
 function settingsFromBackend(raw: Record<string, unknown> | undefined): UserSettings {
@@ -240,8 +234,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [backendMode]);
 
   const updateProfile = useCallback(
-    (updates: Partial<Pick<User, "name" | "email" | "phone">>) => {
-      if (backendMode) return "Profile updates require backend API (not yet wired).";
+    async (updates: Partial<Pick<User, "name" | "email" | "phone">>) => {
+      if (backendMode) {
+        try {
+          const remote = await apiUpdateProfile(updates);
+          setUser(backendToUser(remote));
+          return null;
+        } catch (err) {
+          return err instanceof Error ? err.message : "Profile update failed";
+        }
+      }
       if (!user) return "Not logged in.";
       const result = updateUserProfile(user.id, updates);
       if ("error" in result) return result.error;
@@ -252,8 +254,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const changePassword = useCallback(
-    (current: string, next: string) => {
-      if (backendMode) return "Password change requires backend API (not yet wired).";
+    async (current: string, next: string) => {
+      if (backendMode) {
+        try {
+          await apiChangePassword({ currentPassword: current, newPassword: next });
+          return null;
+        } catch (err) {
+          return err instanceof Error ? err.message : "Password change failed";
+        }
+      }
       if (!user) return "Not logged in.";
       const result = updateUserPassword(user.id, current, next);
       if ("error" in result) return result.error;
@@ -264,8 +273,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const saveSettings = useCallback(
     (partial: Partial<UserSettings>) => {
+      setSettings((prev) => ({ ...prev, ...partial }));
       if (backendMode) {
-        setSettings((prev) => ({ ...prev, ...partial }));
+        void apiUpdateSettings(partial)
+          .then((remote) => {
+            setSettings(settingsFromBackend(remote.settings));
+          })
+          .catch(() => {
+            /* keep optimistic local settings */
+          });
         return;
       }
       if (!user) return;

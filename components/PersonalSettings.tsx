@@ -47,20 +47,20 @@ export function PersonalSettings({
     year: "numeric",
   });
 
-  function handleProfileSave(e: React.FormEvent) {
+  async function handleProfileSave(e: React.FormEvent) {
     e.preventDefault();
     setProfileError("");
     setProfileMsg("");
-    const err = updateProfile({ name, email, phone });
+    const err = await updateProfile({ name, email, phone });
     if (err) setProfileError(err);
     else setProfileMsg("Profile updated successfully.");
   }
 
-  function handlePasswordSave(e: React.FormEvent) {
+  async function handlePasswordSave(e: React.FormEvent) {
     e.preventDefault();
     setPasswordError("");
     setPasswordMsg("");
-    const err = changePassword(currentPassword, newPassword);
+    const err = await changePassword(currentPassword, newPassword);
     if (err) setPasswordError(err);
     else {
       setPasswordMsg("Password changed successfully.");

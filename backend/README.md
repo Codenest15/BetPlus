@@ -35,6 +35,17 @@ cd backend
 py -m pytest tests/ -v
 ```
 
+PostgreSQL concurrency tests are skipped unless `POSTGRES_TEST_URL` is set.
+
+## Demo users (SEED_DEMO_DATA=true)
+
+| Email | Password | Role |
+|-------|----------|------|
+| admin@betplus.com | admin123 | admin |
+| demo@betplus.local | demo123 | admin |
+| manager@betplus.local | manager123 | manager |
+
+
 ## API versioning
 
 - Primary: `/api/v1/...`

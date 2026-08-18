@@ -3,13 +3,32 @@
 import { useEffect, useState } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
 import { getAdminAuditLog, type AdminAuditEntry } from "@/lib/admin-store";
+import { adminGetAudit, useBackendApi } from "@/lib/backend-client";
 
 export default function AdminAuditPage() {
+  const backendMode = useBackendApi();
   const [entries, setEntries] = useState<AdminAuditEntry[]>([]);
 
   useEffect(() => {
-    setEntries(getAdminAuditLog());
-  }, []);
+    async function load() {
+      if (backendMode) {
+        const remote = await adminGetAudit();
+        setEntries(
+          remote.map((e) => ({
+            id: e.id,
+            action: e.action,
+            detail: e.detail,
+            at: e.created_at ?? new Date().toISOString(),
+            betId: e.bet_id ?? undefined,
+            bookingCode: e.booking_code ?? undefined,
+          })),
+        );
+        return;
+      }
+      setEntries(getAdminAuditLog());
+    }
+    void load();
+  }, [backendMode]);
 
   return (
     <AdminGate>
@@ -17,7 +36,7 @@ export default function AdminAuditPage() {
         <div>
           <h1 className="page-title">Audit log</h1>
           <p className="text-xs text-muted">
-            Record of admin actions on this device (demo local storage).
+            Record of admin actions{backendMode ? " (server audit log)." : " on this device (demo local storage)."}.
           </p>
         </div>
 

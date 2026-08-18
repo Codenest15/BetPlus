@@ -156,6 +156,8 @@ export interface BackendBetSelection {
   league: string;
   market_id: string | null;
   market_name: string | null;
+  outcome_label: string | null;
+  manager_ft_score: { home: number; away: number } | null;
 }
 
 export interface BackendBet {
@@ -222,6 +224,300 @@ export async function getBetByVerifyCode(code: string) {
   });
 }
 
-export function useBackendApi(): boolean {
+export function isBackendEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_BACKEND === "true";
+}
+
+export function useBackendApi(): boolean {
+  return isBackendEnabled();
+}
+
+export async function updateProfile(input: {
+  name?: string;
+  email?: string;
+  phone?: string;
+}): Promise<BackendUser> {
+  return apiRequest<BackendUser>("/api/v1/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function changePassword(input: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<BackendUser> {
+  return apiRequest<BackendUser>("/api/v1/auth/me/password", {
+    method: "POST",
+    body: JSON.stringify({
+      current_password: input.currentPassword,
+      new_password: input.newPassword,
+    }),
+  });
+}
+
+export async function updateSettings(input: Record<string, unknown>): Promise<BackendUser> {
+  return apiRequest<BackendUser>("/api/v1/auth/me/settings", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export interface BackendAdminStats {
+  users: number;
+  bets: number;
+  open_bets: number;
+  total_user_balance: number;
+  platform_balance: number;
+  net_position: number;
+}
+
+export interface BackendLedgerEntry {
+  id: string;
+  entry_type: string;
+  amount: number;
+  description: string;
+  user_id: string | null;
+  bet_id: string | null;
+  created_at: string | null;
+}
+
+export interface BackendAuditEntry {
+  id: string;
+  actor_id: string | null;
+  role: string;
+  action: string;
+  detail: string;
+  bet_id: string | null;
+  match_id: string | null;
+  booking_code: string | null;
+  created_at: string | null;
+}
+
+export interface BackendManagerMatch {
+  id: number;
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  home_abbr: string | null;
+  away_abbr: string | null;
+  league: string;
+  sport: string;
+  kickoff: string | null;
+  status: string;
+  home_score: number;
+  away_score: number;
+  is_manual: boolean;
+  managed: boolean;
+  note: string | null;
+  game_status: string;
+  is_live: boolean;
+  updated_at: string | null;
+}
+
+export interface BackendReferralUser {
+  user_id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  signed_up_at: string;
+  deposit_count: number;
+  total_deposited: number;
+  gross_revenue: number;
+  commission_earned: number;
+}
+
+export interface BackendReferralStats {
+  manager_id?: string;
+  referral_code: string;
+  invite_link: string;
+  signup_count: number;
+  total_deposits: number;
+  gross_revenue: number;
+  manager_earnings: number;
+  platform_earnings: number;
+  referrals: BackendReferralUser[];
+}
+
+export interface BackendManagerReferralRow {
+  manager_id: string;
+  name: string;
+  email: string;
+  referral_code: string;
+  signup_count: number;
+  total_deposits: number;
+  gross_revenue: number;
+  manager_earnings: number;
+  platform_earnings: number;
+}
+
+export async function adminGetStats() {
+  return apiRequest<BackendAdminStats>("/api/v1/admin/stats");
+}
+
+export async function adminGetUsers() {
+  return apiRequest<BackendUser[]>("/api/v1/admin/users");
+}
+
+export async function adminGetUser(userId: string) {
+  return apiRequest<BackendUser>(`/api/v1/admin/users/${userId}`);
+}
+
+export async function adminPatchUser(
+  userId: string,
+  patch: { is_manager?: boolean; balance?: number },
+) {
+  return apiRequest<BackendUser>(`/api/v1/admin/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function adminCreditUser(
+  userId: string,
+  amount: number,
+  description?: string,
+) {
+  return apiRequest<BackendTransaction>(`/api/v1/admin/users/${userId}/credit`, {
+    method: "POST",
+    body: JSON.stringify({ amount, description }),
+  });
+}
+
+export async function adminGetUserTransactions(userId: string) {
+  return apiRequest<BackendTransaction[]>(
+    `/api/v1/admin/users/${userId}/transactions`,
+  );
+}
+
+export async function adminGetUserBets(userId: string) {
+  return apiRequest<BackendBet[]>(`/api/v1/admin/users/${userId}/bets`);
+}
+
+export async function adminGetBets() {
+  return apiRequest<BackendBet[]>("/api/v1/admin/bets");
+}
+
+export async function adminGetBet(betId: string) {
+  return apiRequest<BackendBet>(`/api/v1/admin/bets/${betId}`);
+}
+
+export async function adminPatchBet(
+  betId: string,
+  patch: {
+    stake?: number;
+    selections?: Array<{
+      match_id: string;
+      home_team: string;
+      away_team: string;
+      selection: string;
+      selection_label: string;
+      odds: number;
+      league?: string;
+      market_id?: string;
+      market_name?: string;
+    }>;
+  },
+) {
+  return apiRequest<BackendBet>(`/api/v1/admin/bets/${betId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function adminSettleBetApi(betId: string, status: string) {
+  return apiRequest<BackendBet>(`/api/v1/admin/bets/${betId}/settle`, {
+    method: "POST",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function adminRunSettlement() {
+  return apiRequest<{ settled: number }>("/api/v1/admin/settlement/run", {
+    method: "POST",
+  });
+}
+
+export async function adminGetLedger() {
+  return apiRequest<BackendLedgerEntry[]>("/api/v1/admin/ledger");
+}
+
+export async function adminGetReferrals() {
+  return apiRequest<BackendManagerReferralRow[]>("/api/v1/admin/referrals");
+}
+
+export async function adminGetReferralDetail(managerId: string) {
+  return apiRequest<BackendReferralStats>(`/api/v1/admin/referrals/${managerId}`);
+}
+
+export async function adminGetAudit() {
+  return apiRequest<BackendAuditEntry[]>("/api/v1/admin/audit");
+}
+
+export async function managerGetMatches() {
+  return apiRequest<BackendManagerMatch[]>("/api/v1/manager/matches");
+}
+
+export async function managerCreateMatch(input: {
+  home_team: string;
+  away_team: string;
+  league: string;
+  sport?: string;
+  kickoff?: string;
+  note?: string;
+}) {
+  return apiRequest<BackendManagerMatch>("/api/v1/manager/matches", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function managerUpdateMatch(
+  matchId: string,
+  patch: Record<string, unknown>,
+) {
+  return apiRequest<BackendManagerMatch>(
+    `/api/v1/manager/matches/${encodeURIComponent(matchId)}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  );
+}
+
+export async function managerTakeControl(matchId: string) {
+  return apiRequest<BackendManagerMatch>(
+    `/api/v1/manager/matches/${encodeURIComponent(matchId)}/control`,
+    { method: "POST" },
+  );
+}
+
+export async function managerReleaseControl(matchId: string) {
+  return apiRequest<{ ok: boolean }>(
+    `/api/v1/manager/matches/${encodeURIComponent(matchId)}/control`,
+    { method: "DELETE" },
+  );
+}
+
+export async function managerDeleteMatch(matchId: string) {
+  return apiRequest<{ ok: boolean }>(
+    `/api/v1/manager/matches/${encodeURIComponent(matchId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function managerUpdateLeg(
+  betId: string,
+  legIndex: number,
+  patch: Record<string, unknown>,
+) {
+  return apiRequest<BackendBet>(
+    `/api/v1/manager/bets/${betId}/legs/${legIndex}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  );
+}
+
+export async function managerGetReferrals() {
+  return apiRequest<BackendReferralStats>("/api/v1/manager/referrals");
+}
+
+export async function managerGetAudit() {
+  return apiRequest<BackendAuditEntry[]>("/api/v1/manager/audit");
 }

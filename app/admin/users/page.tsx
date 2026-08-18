@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
 import { DemoSeedPanel } from "@/components/admin/DemoSeedPanel";
 import { logAdminAction } from "@/lib/admin-store";
@@ -12,9 +12,17 @@ import { trackReferralDeposit } from "@/lib/referral-store";
 import { seedUser1DemoSlip } from "@/lib/demo-seed";
 import type { PlacedBet } from "@/lib/bet-types";
 import type { User } from "@/lib/user-types";
+import {
+  adminCreditUser,
+  adminGetUsers,
+  adminPatchUser,
+  useBackendApi,
+} from "@/lib/backend-client";
+import { backendUserToLocal } from "@/lib/backend-mappers";
 import { formatMoney } from "@/lib/utils";
 
 export default function AdminUsersPage() {
+  const backendMode = useBackendApi();
   const [users, setUsers] = useState<User[]>([]);
   const [demo, setDemo] = useState<{
     user: User;
@@ -26,22 +34,43 @@ export default function AdminUsersPage() {
   const [creditNote, setCreditNote] = useState("Admin credit");
   const [message, setMessage] = useState("");
 
-  function reload() {
+  const reload = useCallback(async () => {
+    if (backendMode) {
+      setDemo(null);
+      const remote = await adminGetUsers();
+      setUsers(remote.map(backendUserToLocal));
+      return;
+    }
     setDemo(seedUser1DemoSlip());
     setUsers(getAllUsers());
-  }
+  }, [backendMode]);
 
   useEffect(() => {
-    reload();
-  }, []);
+    void reload();
+  }, [reload]);
 
-  function handleCredit(e: React.FormEvent) {
+  async function handleCredit(e: React.FormEvent) {
     e.preventDefault();
     if (!creditUserId) return;
 
     const amount = Number.parseFloat(creditAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       setMessage("Enter a valid amount");
+      return;
+    }
+
+    if (backendMode) {
+      try {
+        await adminCreditUser(creditUserId, amount, creditNote.trim() || "Admin credit");
+        const user = users.find((u) => u.id === creditUserId);
+        setCreditUserId(null);
+        setCreditAmount("");
+        setCreditNote("Admin credit");
+        setMessage(`Credited ${formatMoney(amount)} to ${user?.name ?? "user"}`);
+        await reload();
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : "Credit failed");
+      }
       return;
     }
 
@@ -74,11 +103,25 @@ export default function AdminUsersPage() {
     setCreditAmount("");
     setCreditNote("Admin credit");
     setMessage(`Credited ${formatMoney(amount)} to ${user.name}`);
-    reload();
+    void reload();
   }
 
-  function handleToggleManager(user: User) {
+  async function handleToggleManager(user: User) {
     const next = !user.isManager;
+    if (backendMode) {
+      try {
+        await adminPatchUser(user.id, { is_manager: next });
+        setMessage(
+          next
+            ? `${user.name} is now a manager.`
+            : `Manager access removed for ${user.name}`,
+        );
+        await reload();
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : "Update failed");
+      }
+      return;
+    }
     const result = setUserManagerRole(user.id, next);
     if ("error" in result) {
       setMessage(result.error);
@@ -93,7 +136,7 @@ export default function AdminUsersPage() {
         ? `${result.user.name} is now a manager. They must use the main app (localhost:3000), log in as that user, then open Me → Manager tools. Admin on port 3001 uses separate browser data.`
         : `Manager access removed for ${result.user.name}`,
     );
-    reload();
+    void reload();
   }
 
   return (
@@ -106,7 +149,7 @@ export default function AdminUsersPage() {
           </p>
         </div>
 
-        <DemoSeedPanel demo={demo} onReload={reload} />
+        {!backendMode && <DemoSeedPanel demo={demo} onReload={() => void reload()} />}
 
         {message && (
           <p className="rounded-md border border-brand/20 bg-brand/5 px-3 py-2 text-xs text-brand-dark">

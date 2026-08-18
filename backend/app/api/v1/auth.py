@@ -6,25 +6,16 @@ from app.api.deps import get_current_user
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas import Token, UserOut, UserRegister
+from app.schemas import (
+    PasswordChangeIn,
+    Token,
+    UserOut,
+    UserProfileUpdate,
+    UserRegister,
+    UserSettingsUpdate,
+)
 
 router = APIRouter()
-
-
-def _ensure_manager_referral(db: Session, user: User) -> None:
-    if not user.is_manager or user.referral_code:
-        return
-    prefix = "".join(ch for ch in user.name if ch.isalnum())[:4].upper() or "MGR"
-    suffix = user.id.replace("-", "")[:4].upper()
-    code = f"{prefix}{suffix}"
-    attempt = 0
-    while db.query(User).filter(User.referral_code == code, User.id != user.id).first():
-        attempt += 1
-        code = f"{prefix}{suffix}{attempt}"
-    user.referral_code = code
-    db.add(user)
-    db.commit()
-    db.refresh(user)
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -87,4 +78,72 @@ def login(
 
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    payload: UserProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty")
+        current_user.name = name
+
+    if payload.email is not None:
+        email = payload.email.strip().lower()
+        existing = db.query(User).filter(User.email == email, User.id != current_user.id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        current_user.email = email
+
+    if payload.phone is not None:
+        phone = payload.phone.strip() or None
+        if phone:
+            existing = (
+                db.query(User)
+                .filter(User.phone == phone, User.id != current_user.id)
+                .first()
+            )
+            if existing:
+                raise HTTPException(status_code=400, detail="Phone already registered")
+        current_user.phone = phone
+
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.post("/me/password", response_model=UserOut)
+def change_password(
+    payload: PasswordChangeIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    current_user.hashed_password = get_password_hash(payload.new_password)
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.patch("/me/settings", response_model=UserOut)
+def update_settings(
+    payload: UserSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    settings = dict(current_user.settings or {})
+    updates = payload.model_dump(exclude_none=True)
+    settings.update(updates)
+    current_user.settings = settings
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
     return current_user

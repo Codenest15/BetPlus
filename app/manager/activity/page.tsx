@@ -7,13 +7,31 @@ import {
   getManagerAuditLog,
   type ManagerAuditEntry,
 } from "@/lib/manager-store";
+import { managerGetAudit, useBackendApi } from "@/lib/backend-client";
 
 export default function ManagerActivityPage() {
+  const backendMode = useBackendApi();
   const [log, setLog] = useState<ManagerAuditEntry[]>([]);
 
   useEffect(() => {
-    setLog(getManagerAuditLog());
-  }, []);
+    async function load() {
+      if (backendMode) {
+        const remote = await managerGetAudit();
+        setLog(
+          remote.map((e) => ({
+            id: e.id,
+            action: e.action,
+            detail: e.detail,
+            at: e.created_at ?? new Date().toISOString(),
+            matchId: e.match_id ?? undefined,
+          })),
+        );
+        return;
+      }
+      setLog(getManagerAuditLog());
+    }
+    void load();
+  }, [backendMode]);
 
   return (
     <ManagerGate>

@@ -17,6 +17,14 @@ import {
   type ManagerMatchStatus,
   type ManagerMatchView,
 } from "@/lib/manager-matches-store";
+import {
+  managerCreateMatch,
+  managerGetMatches,
+  managerTakeControl,
+  managerUpdateMatch,
+  useBackendApi,
+} from "@/lib/backend-client";
+import { backendMatchToView } from "@/lib/backend-mappers";
 
 function formatKickoff(iso: string) {
   return new Date(iso).toLocaleString("en-GB", {
@@ -32,6 +40,7 @@ function MatchesContent() {
   const searchParams = useSearchParams();
   const showNew = searchParams.get("new") === "1";
 
+  const backendMode = useBackendApi();
   const [matches, setMatches] = useState<ManagerMatchView[]>([]);
   const [filter, setFilter] = useState<"all" | "managed" | "not_started">(
     "all",
@@ -43,16 +52,21 @@ function MatchesContent() {
   const [league, setLeague] = useState("Ghana Premier League");
   const [kickoff, setKickoff] = useState("");
 
-  function reload() {
+  async function reload() {
+    if (backendMode) {
+      const remote = await managerGetMatches();
+      setMatches(remote.map(backendMatchToView));
+      return;
+    }
     setMatches(listManagerMatches());
   }
 
   useEffect(() => {
-    reload();
+    void reload();
     const d = new Date();
     d.setHours(d.getHours() + 2, 0, 0, 0);
     setKickoff((prev) => prev || d.toISOString().slice(0, 16));
-  }, []);
+  }, [backendMode]);
 
   const filtered = matches.filter((m) => {
     if (filter === "managed" && !m.managed) return false;
@@ -60,10 +74,24 @@ function MatchesContent() {
     return true;
   });
 
-  function handleCreateManual(e: React.FormEvent) {
+  async function handleCreateManual(e: React.FormEvent) {
     e.preventDefault();
     if (!homeTeam.trim() || !awayTeam.trim()) {
       setMessage("Enter home and away team names");
+      return;
+    }
+    if (backendMode) {
+      const remote = await managerCreateMatch({
+        home_team: homeTeam,
+        away_team: awayTeam,
+        league,
+        kickoff: new Date(kickoff).toISOString(),
+      });
+      setMessage(`Created ${remote.home_team} vs ${remote.away_team}`);
+      setHomeTeam("");
+      setAwayTeam("");
+      await reload();
+      router.push(`/manager/matches/${remote.match_id}`);
       return;
     }
     const record = createManualMatch({
@@ -76,23 +104,38 @@ function MatchesContent() {
     setMessage(`Created ${record.homeTeam} vs ${record.awayTeam}`);
     setHomeTeam("");
     setAwayTeam("");
-    reload();
+    void reload();
     router.push(`/manager/matches/${record.matchId}`);
   }
 
-  function handleTakeControl(matchId: string) {
+  async function handleTakeControl(matchId: string) {
+    if (backendMode) {
+      await managerTakeControl(matchId);
+      setMessage("Match is now under your control");
+      await reload();
+      router.push(`/manager/matches/${matchId}`);
+      return;
+    }
     takeControlOfCatalogMatch(matchId);
     setMessage("Match is now under your control");
-    reload();
+    void reload();
     router.push(`/manager/matches/${matchId}`);
   }
 
-  function handleQuickStatus(matchId: string, status: ManagerMatchStatus) {
+  async function handleQuickStatus(matchId: string, status: ManagerMatchStatus) {
+    if (backendMode) {
+      const remote = await managerUpdateMatch(matchId, { status });
+      setMessage(
+        `${remote.home_team} vs ${remote.away_team} → ${MANAGER_STATUS_LABELS[status]}`,
+      );
+      await reload();
+      return;
+    }
     const updated = updateManagedMatch(matchId, { status });
     if (!updated) return;
     reconcileBetsForMatch(matchId);
     setMessage(`${updated.homeTeam} vs ${updated.awayTeam} → ${MANAGER_STATUS_LABELS[status]}`);
-    reload();
+    void reload();
   }
 
   return (

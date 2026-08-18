@@ -18,6 +18,15 @@ import {
   type ManagerMatchStatus,
   type ManagerMatchView,
 } from "@/lib/manager-matches-store";
+import {
+  managerDeleteMatch,
+  managerGetMatches,
+  managerReleaseControl,
+  managerTakeControl,
+  managerUpdateMatch,
+  useBackendApi,
+} from "@/lib/backend-client";
+import { backendMatchToView } from "@/lib/backend-mappers";
 
 function formatKickoff(iso: string) {
   return new Date(iso).toLocaleString("en-GB", {
@@ -40,6 +49,7 @@ export default function ManagerMatchDetailPage() {
   const router = useRouter();
   const matchId = params.id as string;
 
+  const backendMode = useBackendApi();
   const [match, setMatch] = useState<ManagerMatchView | null>(null);
   const [status, setStatus] = useState<ManagerMatchStatus>("not_started");
   const [homeScore, setHomeScore] = useState("0");
@@ -51,7 +61,26 @@ export default function ManagerMatchDetailPage() {
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
 
-  function load() {
+  async function load() {
+    if (backendMode) {
+      const remote = await managerGetMatches();
+      let view = remote.map(backendMatchToView).find((m) => m.matchId === matchId) ?? null;
+      if (view && !view.managed && view.source === "catalog") {
+        const taken = await managerTakeControl(matchId);
+        view = backendMatchToView(taken);
+      }
+      if (!view) return;
+      setMatch(view);
+      setStatus(view.status);
+      setHomeScore(String(view.homeScore));
+      setAwayScore(String(view.awayScore));
+      setHomeTeam(view.homeTeam);
+      setAwayTeam(view.awayTeam);
+      setLeague(view.league);
+      setKickoff(toLocalInput(view.kickoff));
+      setNote(view.note ?? "");
+      return;
+    }
     let view = getManagerMatchView(matchId);
     if (view && !view.managed && view.source === "catalog") {
       takeControlOfCatalogMatch(matchId);
@@ -70,18 +99,38 @@ export default function ManagerMatchDetailPage() {
   }
 
   useEffect(() => {
-    load();
-  }, [matchId]);
+    void load();
+  }, [matchId, backendMode]);
 
   const phase = match ? getMatchPhase(match.kickoff) : "before_kickoff";
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!match) return;
 
     const kickoffIso = kickoff
       ? new Date(kickoff).toISOString()
       : match.kickoff;
+
+    if (backendMode) {
+      await managerUpdateMatch(matchId, {
+        status,
+        home_score: Number.parseInt(homeScore, 10) || 0,
+        away_score: Number.parseInt(awayScore, 10) || 0,
+        home_team: homeTeam.trim(),
+        away_team: awayTeam.trim(),
+        league: league.trim(),
+        kickoff: kickoffIso,
+        note: note.trim() || undefined,
+      });
+      await load();
+      setMessage(
+        status === "not_started"
+          ? "Match saved — status set to not started."
+          : `Match updated as ${MANAGER_STATUS_LABELS[status]}. Related bets reconciled.`,
+      );
+      return;
+    }
 
     const updated = updateManagedMatch(matchId, {
       status,
@@ -108,7 +157,16 @@ export default function ManagerMatchDetailPage() {
     );
   }
 
-  function handleRelease() {
+  async function handleRelease() {
+    if (backendMode) {
+      if (match?.isManual) {
+        await managerDeleteMatch(matchId);
+      } else {
+        await managerReleaseControl(matchId);
+      }
+      router.push("/manager/matches");
+      return;
+    }
     if (match?.isManual) {
       deleteManualMatch(matchId);
       router.push("/manager/matches");

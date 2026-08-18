@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BetPlus Frontend
 
-## Getting Started
-
-First, run the development server:
+## Development
 
 ```bash
+cp .env.example .env.local
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Backend mode (recommended)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Set in `.env.local`:
 
-## Learn More
+```
+NEXT_PUBLIC_USE_BACKEND=true
+BACKEND_URL=http://localhost:8000
+```
 
-To learn more about Next.js, take a look at the following resources:
+Start FastAPI first (`backend/README.md`), then Next.js.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+In backend mode, authentication, wallet, bets, settlement, admin, manager, referrals, and the platform ledger are served by FastAPI. The JWT is stored in the browser only as a session token.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Admin portal
 
-## Deploy on Vercel
+```bash
+npm run dev:admin
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Uses `ADMIN_ONLY=true`. Sign in with a FastAPI admin user (`admin@betplus.com` / `admin123` when demo seed is enabled) or the `ADMIN_EMAIL` / `ADMIN_PASSWORD` env fallback.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Public betting app |
+| `npm run dev:admin` | Admin-only portal |
+| `npm run lint` | ESLint |
+| `npm run build` | Production build |
+| `npm start` | Serve production build |

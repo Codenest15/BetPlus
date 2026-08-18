@@ -119,6 +119,8 @@ class BetSelectionOut(BaseModel):
     league: str
     market_id: str | None = None
     market_name: str | None = None
+    outcome_label: str | None = None
+    manager_ft_score: dict[str, Any] | None = None
 
 
 class BetCreate(BaseModel):
@@ -155,3 +157,107 @@ class BetOut(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class UserProfileUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+    email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=32)
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=6)
+
+
+class UserSettingsUpdate(BaseModel):
+    notifications: bool | None = None
+    oddsFormat: str | None = None
+    language: str | None = None
+    managerMode: bool | None = None
+
+
+class AdminUserPatch(BaseModel):
+    is_manager: bool | None = None
+    balance: float | None = Field(default=None, ge=0)
+
+
+class AdminCreditIn(BaseModel):
+    amount: float = Field(gt=0)
+    description: str | None = None
+
+
+class AdminSettleIn(BaseModel):
+    status: str = Field(pattern="^(won|lost|void)$")
+
+
+class AdminBetPatch(BaseModel):
+    stake: float | None = Field(default=None, gt=0)
+    selections: list[BetSelectionIn] | None = None
+
+
+class AdminStatsOut(BaseModel):
+    users: int
+    bets: int
+    open_bets: int
+    total_user_balance: float
+    platform_balance: float
+    net_position: float
+
+
+class LedgerEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    entry_type: str
+    amount: float
+    description: str
+    user_id: str | None = None
+    bet_id: str | None = None
+    created_at: datetime | None = None
+
+
+class AuditLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    actor_id: str | None = None
+    role: str
+    action: str
+    detail: str
+    bet_id: str | None = None
+    match_id: str | None = None
+    booking_code: str | None = None
+    created_at: datetime | None = None
+
+
+class ManagerMatchCreate(BaseModel):
+    home_team: str = Field(min_length=1, max_length=255)
+    away_team: str = Field(min_length=1, max_length=255)
+    league: str = Field(default="Manual League", max_length=255)
+    sport: str = Field(default="football", max_length=32)
+    kickoff: datetime | None = None
+    note: str | None = None
+
+
+class ManagerMatchPatch(BaseModel):
+    status: str | None = None
+    home_score: int | None = Field(default=None, ge=0)
+    away_score: int | None = Field(default=None, ge=0)
+    home_team: str | None = Field(default=None, max_length=255)
+    away_team: str | None = Field(default=None, max_length=255)
+    league: str | None = None
+    kickoff: datetime | None = None
+    note: str | None = None
+
+
+class ManagerLegPatch(BaseModel):
+    selection: str | None = None
+    selection_label: str | None = None
+    odds: float | None = Field(default=None, gt=0)
+    market_id: str | None = None
+    market_name: str | None = None
+    outcome_label: str | None = None
+    outcome_status: str | None = None
+    ft_home_score: int | None = Field(default=None, ge=0)
+    ft_away_score: int | None = Field(default=None, ge=0)

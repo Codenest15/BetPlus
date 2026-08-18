@@ -6,6 +6,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
 from app.db.base import Base
+from app.models import AuditLog, Bet, BetSelection, Game, League, PlatformLedger, ReferralDeposit, Sport, Transaction, User  # noqa: F401
 
 config = context.config
 
