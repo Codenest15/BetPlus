@@ -121,17 +121,64 @@ export async function fetchCurrentUser(): Promise<BackendUser> {
 }
 
 export async function deposit(amount: number, description = "") {
-  return apiRequest("/api/v1/wallet/deposit", {
+  return apiRequest<BackendTransaction>("/api/v1/wallet/deposit", {
     method: "POST",
     body: JSON.stringify({ amount, description }),
   });
 }
 
 export async function withdraw(amount: number, description = "") {
-  return apiRequest("/api/v1/wallet/withdraw", {
+  return apiRequest<BackendTransaction>("/api/v1/wallet/withdraw", {
     method: "POST",
     body: JSON.stringify({ amount, description }),
   });
+}
+
+export interface BackendTransaction {
+  id: string;
+  user_id: string;
+  bet_id: string | null;
+  type: string;
+  amount: number;
+  description: string | null;
+  created_at: string;
+}
+
+export interface BackendBetSelection {
+  id: string;
+  leg_index: number;
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  selection: string;
+  selection_label: string;
+  odds: number;
+  league: string;
+  market_id: string | null;
+  market_name: string | null;
+}
+
+export interface BackendBet {
+  id: string;
+  user_id: string;
+  booking_code: string;
+  ticket_id: string | null;
+  verify_code: string | null;
+  stake: number;
+  total_odds: number;
+  potential_win: number;
+  bonus: number;
+  flex_cut: number | null;
+  status: string;
+  payout: number | null;
+  leg_results: unknown[] | null;
+  placed_at: string;
+  settled_at: string | null;
+  selections: BackendBetSelection[];
+}
+
+export async function getTransactions() {
+  return apiRequest<BackendTransaction[]>("/api/v1/wallet/transactions");
 }
 
 export async function getSports() {
@@ -153,18 +200,26 @@ export async function placeBet(input: {
   }>;
   flex_cut?: number;
 }) {
-  return apiRequest("/api/v1/bets/place", {
+  return apiRequest<BackendBet>("/api/v1/bets/place", {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export async function getMyBets() {
-  return apiRequest("/api/v1/bets/my");
+  return apiRequest<BackendBet[]>("/api/v1/bets/my");
 }
 
 export async function getBetByCode(code: string) {
-  return apiRequest(`/api/v1/bets/code/${encodeURIComponent(code)}`, { auth: false });
+  return apiRequest<BackendBet>(`/api/v1/bets/code/${encodeURIComponent(code)}`, {
+    auth: false,
+  });
+}
+
+export async function getBetByVerifyCode(code: string) {
+  return apiRequest<BackendBet>(`/api/v1/bets/verify/${encodeURIComponent(code)}`, {
+    auth: false,
+  });
 }
 
 export function useBackendApi(): boolean {

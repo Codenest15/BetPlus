@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { BetHistoryCard } from "@/components/BetHistoryCard";
 import { useBetSlip } from "@/lib/betslip-context";
 import { useAuth } from "@/lib/auth-context";
 import { clearSettledBets, getBetsByUser } from "@/lib/bet-store";
+import { getMyBets, useBackendApi } from "@/lib/backend-client";
+import { backendBetToPlacedBet } from "@/lib/backend-mappers";
 import type { BetStatus, PlacedBet } from "@/lib/bet-types";
 
 export type TicketsTab = "open-bets" | "bet-history";
@@ -98,12 +100,36 @@ export function BetTicketsPanel({
   onRemix,
   onOpenTicket,
 }: BetTicketsPanelProps) {
+  const backendMode = useBackendApi();
   const { user, openLogin } = useAuth();
   const { loadSlip, setSlipTab } = useBetSlip();
   const [internalTab, setInternalTab] = useState<TicketsTab>("open-bets");
   const [settledFilter, setSettledFilter] = useState<SettledFilter>("unsettled");
   const [resultFilter, setResultFilter] = useState<ResultFilter>("all");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [remoteBets, setRemoteBets] = useState<PlacedBet[]>([]);
+  const [betsLoading, setBetsLoading] = useState(false);
+  const [betsError, setBetsError] = useState("");
+
+  const loadRemoteBets = useCallback(async () => {
+    if (!user || !backendMode) return;
+    setBetsLoading(true);
+    setBetsError("");
+    try {
+      const remote = await getMyBets();
+      setRemoteBets(remote.map(backendBetToPlacedBet));
+    } catch (err) {
+      setBetsError(err instanceof Error ? err.message : "Failed to load bets");
+    } finally {
+      setBetsLoading(false);
+    }
+  }, [user, backendMode]);
+
+  useEffect(() => {
+    if (backendMode && user) {
+      void loadRemoteBets();
+    }
+  }, [backendMode, user, loadRemoteBets, refreshKey]);
 
   useEffect(() => {
     function bump() {
@@ -127,11 +153,12 @@ export function BetTicketsPanel({
     }
   }
 
-  const allBets = useMemo(
-    () => (user ? getBetsByUser(user.id) : []),
+  const allBets = useMemo(() => {
+    if (!user) return [];
+    if (backendMode) return remoteBets;
+    return getBetsByUser(user.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshKey forces re-read after settle/clear
-    [user?.id, refreshKey],
-  );
+  }, [user?.id, backendMode, remoteBets, refreshKey]);
 
   const filtered = useMemo(
     () => filterBets(allBets, settledFilter, resultFilter),
@@ -148,6 +175,7 @@ export function BetTicketsPanel({
 
   function handleClearHistory() {
     if (!user) return;
+    if (backendMode) return;
     if (!confirm("Clear all settled bet history?")) return;
     clearSettledBets(user.id);
     setRefreshKey((k) => k + 1);
@@ -235,7 +263,20 @@ export function BetTicketsPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto bg-background px-3 py-3">
-        {filtered.length === 0 ? (
+        {betsLoading ? (
+          <p className="py-8 text-center text-sm text-muted">Loading bets...</p>
+        ) : betsError ? (
+          <div className="space-y-2 py-8 text-center">
+            <p className="text-sm text-live">{betsError}</p>
+            <button
+              type="button"
+              onClick={() => void loadRemoteBets()}
+              className="text-xs font-medium text-brand hover:underline"
+            >
+              Retry
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">
             {activeTab === "open-bets"
               ? "No open bets. Add picks and place a bet."

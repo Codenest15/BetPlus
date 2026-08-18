@@ -7,6 +7,12 @@ import {
 } from "./demo-bets";
 import { getBetByCode, getBetByVerifyCode } from "./bet-store";
 import {
+  getBetByCode as apiGetBetByCode,
+  getBetByVerifyCode as apiGetBetByVerifyCode,
+  useBackendApi,
+} from "./backend-client";
+import { backendBetToPlacedBet } from "./backend-mappers";
+import {
   betTypeLabel,
   statusHeadline,
   ticketBonus,
@@ -59,6 +65,29 @@ export function lookupTicketVerification(code: string): PlacedBet | null {
     getBetByCode(normalized) ??
     findDemoBet(normalized)
   );
+}
+
+export async function lookupTicketVerificationAsync(
+  code: string,
+): Promise<PlacedBet | null> {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return null;
+
+  if (useBackendApi()) {
+    try {
+      const byVerify = await apiGetBetByVerifyCode(normalized);
+      return backendBetToPlacedBet(byVerify);
+    } catch {
+      try {
+        const byCode = await apiGetBetByCode(normalized);
+        return backendBetToPlacedBet(byCode);
+      } catch {
+        return findDemoBet(normalized);
+      }
+    }
+  }
+
+  return lookupTicketVerification(normalized);
 }
 
 export function buildTicketVerification(bet: PlacedBet): TicketVerification {

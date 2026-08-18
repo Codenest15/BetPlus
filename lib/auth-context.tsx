@@ -59,7 +59,7 @@ interface AuthContextValue {
   saveSettings: (settings: Partial<UserSettings>) => void;
   canManage: boolean;
   setManagerMode: (enabled: boolean) => void;
-  refreshUser: () => void;
+  refreshUser: () => Promise<void>;
   deductBalance: (amount: number) => string | null;
 }
 
@@ -313,9 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       saveSettings,
       canManage,
       setManagerMode,
-      refreshUser: () => {
-        void refreshUser();
-      },
+      refreshUser,
       deductBalance,
     }),
     [
