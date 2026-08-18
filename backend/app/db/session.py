@@ -1,22 +1,40 @@
-import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from collections.abc import Generator
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.core.config import get_settings, reset_settings_cache
 from app.db.base import Base
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/betplus"
-)
 
-engine = create_engine(DATABASE_URL)
+def _build_engine():
+    settings = get_settings()
+    connect_args = (
+        {"check_same_thread": False}
+        if settings.database_url.startswith("sqlite")
+        else {}
+    )
+    return create_engine(settings.database_url, connect_args=connect_args)
+
+
+engine = _build_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db() -> None:
+    """Create tables from metadata. Prefer Alembic migrations in production."""
     Base.metadata.create_all(bind=engine)
 
 
-def get_db():
+def reconfigure_engine() -> None:
+    """Recreate engine/session after environment changes (tests)."""
+    global engine, SessionLocal
+    reset_settings_cache()
+    engine = _build_engine()
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db

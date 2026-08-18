@@ -60,16 +60,20 @@ function LoginForm({
   onSubmit,
   onSwitch,
 }: {
-  onSubmit: (identifier: string, password: string) => string | null;
+  onSubmit: (identifier: string, password: string) => Promise<string | null>;
   onSwitch: () => void;
 }) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(onSubmit(identifier, password) ?? "");
+    setSubmitting(true);
+    const result = await onSubmit(identifier, password);
+    setError(result ?? "");
+    setSubmitting(false);
   }
 
   return (
@@ -99,9 +103,10 @@ function LoginForm({
 
       <button
         type="submit"
-        className="w-full rounded-lg bg-brand-dark py-3 text-sm font-bold text-white hover:bg-brand"
+        disabled={submitting}
+        className="w-full rounded-lg bg-brand-dark py-3 text-sm font-bold text-white hover:bg-brand disabled:opacity-60"
       >
-        Log In
+        {submitting ? "Logging in…" : "Log In"}
       </button>
 
       <p className="text-center text-sm text-muted">
@@ -123,7 +128,7 @@ function RegisterForm({
     email: string;
     phone: string;
     password: string;
-  }) => string | null;
+  }) => Promise<string | null>;
   onSwitch: () => void;
 }) {
   const [name, setName] = useState("");
@@ -131,6 +136,7 @@ function RegisterForm({
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [referrerName, setReferrerName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -143,9 +149,12 @@ function RegisterForm({
     setReferrerName(manager?.name ?? null);
   }, []);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(onSubmit({ name, email, phone, password }) ?? "");
+    setSubmitting(true);
+    const result = await onSubmit({ name, email, phone, password });
+    setError(result ?? "");
+    setSubmitting(false);
   }
 
   return (
@@ -191,9 +200,10 @@ function RegisterForm({
 
       <button
         type="submit"
-        className="w-full rounded-lg bg-brand-accent py-3 text-sm font-bold text-brand-dark hover:brightness-95"
+        disabled={submitting}
+        className="w-full rounded-lg bg-brand-accent py-3 text-sm font-bold text-brand-dark hover:brightness-95 disabled:opacity-60"
       >
-        Register
+        {submitting ? "Creating account…" : "Register"}
       </button>
 
       <p className="text-center text-sm text-muted">
