@@ -21,4 +21,4 @@ class PlatformLedger(Base):
     description = Column(Text, nullable=False)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     bet_id = Column(String(36), ForeignKey("bets.id"), nullable=True, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

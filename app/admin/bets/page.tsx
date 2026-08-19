@@ -14,6 +14,7 @@ import type { User } from "@/lib/user-types";
 import { adminGetBets, adminGetUsers, useBackendApi } from "@/lib/backend-client";
 import { backendBetToPlacedBet, backendUserToLocal } from "@/lib/backend-mappers";
 import { formatMoney } from "@/lib/utils";
+import { deferEffect } from "@/lib/defer-effect";
 
 const STATUS_CLASS: Record<PlacedBet["status"], string> = {
   open: "text-brand",
@@ -52,7 +53,9 @@ export default function AdminBetsPage() {
   }, [backendMode]);
 
   useEffect(() => {
-    void reload();
+    return deferEffect(() => {
+      void reload();
+    });
   }, [reload]);
   const userName = (id: string) =>
     users.find((u) => u.id === id)?.name ?? id.slice(0, 8);

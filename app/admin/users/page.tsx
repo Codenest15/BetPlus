@@ -18,6 +18,7 @@ import {
   adminPatchUser,
   useBackendApi,
 } from "@/lib/backend-client";
+import { deferEffect } from "@/lib/defer-effect";
 import { backendUserToLocal } from "@/lib/backend-mappers";
 import { formatMoney } from "@/lib/utils";
 
@@ -46,7 +47,9 @@ export default function AdminUsersPage() {
   }, [backendMode]);
 
   useEffect(() => {
-    void reload();
+    return deferEffect(() => {
+      void reload();
+    });
   }, [reload]);
 
   async function handleCredit(e: React.FormEvent) {

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -14,12 +14,14 @@ from app.schemas import (
     UserRegister,
     UserSettingsUpdate,
 )
+from app.services.rate_limit import client_ip, enforce_rate_limit
 
 router = APIRouter()
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def register(payload: UserRegister, db: Session = Depends(get_db)):
+def register(payload: UserRegister, request: Request, db: Session = Depends(get_db)):
+    enforce_rate_limit(bucket=f"register:{client_ip(request)}", limit=10, window_seconds=60)
     email = payload.email.strip().lower()
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -59,8 +61,11 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
 ):
+    enforce_rate_limit(bucket=f"login:{client_ip(request)}", limit=10, window_seconds=60)
     identifier = form_data.username.strip()
     user = (
         db.query(User)
@@ -121,9 +126,11 @@ def update_me(
 @router.post("/me/password", response_model=UserOut)
 def change_password(
     payload: PasswordChangeIn,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_rate_limit(bucket=f"password:{current_user.id}", limit=5, window_seconds=60)
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     current_user.hashed_password = get_password_hash(payload.new_password)

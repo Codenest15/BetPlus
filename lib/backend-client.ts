@@ -120,10 +120,32 @@ export async function fetchCurrentUser(): Promise<BackendUser> {
   return apiRequest<BackendUser>("/api/v1/auth/me");
 }
 
-export async function deposit(amount: number, description = "") {
-  return apiRequest<BackendTransaction>("/api/v1/wallet/deposit", {
+export async function initiateDeposit(amount: number, channel = "mobile_money") {
+  return apiRequest<{
+    id: string;
+    provider_ref: string;
+    status: string;
+    amount: number;
+    authorization_url: string | null;
+  }>("/api/v1/payments/deposits", {
     method: "POST",
-    body: JSON.stringify({ amount, description }),
+    body: JSON.stringify({ amount, channel }),
+  });
+}
+
+export async function initiateWithdrawal(
+  amount: number,
+  channel = "mobile_money",
+  destination?: string,
+) {
+  return apiRequest<{
+    id: string;
+    provider_ref: string;
+    status: string;
+    amount: number;
+  }>("/api/v1/payments/withdrawals", {
+    method: "POST",
+    body: JSON.stringify({ amount, channel, destination }),
   });
 }
 
@@ -201,10 +223,20 @@ export async function placeBet(input: {
     market_name?: string;
   }>;
   flex_cut?: number;
+  idempotencyKey?: string;
 }) {
+  const headers: HeadersInit = {};
+  if (input.idempotencyKey) {
+    headers["Idempotency-Key"] = input.idempotencyKey;
+  }
   return apiRequest<BackendBet>("/api/v1/bets/place", {
     method: "POST",
-    body: JSON.stringify(input),
+    headers,
+    body: JSON.stringify({
+      stake: input.stake,
+      selections: input.selections,
+      flex_cut: input.flex_cut,
+    }),
   });
 }
 

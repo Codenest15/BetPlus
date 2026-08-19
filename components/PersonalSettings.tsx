@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { formatMoney } from "@/lib/utils";
+import { deferEffect } from "@/lib/defer-effect";
 
 type SettingsTab = "profile" | "password" | "preferences";
 
@@ -23,11 +24,13 @@ export function PersonalSettings({
   const [phone, setPhone] = useState("");
 
   useEffect(() => {
-    if (user) {
-      setName(user.name);
-      setEmail(user.email);
-      setPhone(user.phone);
-    }
+    return deferEffect(() => {
+      if (user) {
+        setName(user.name);
+        setEmail(user.email);
+        setPhone(user.phone);
+      }
+    });
   }, [user]);
 
   const [profileMsg, setProfileMsg] = useState("");

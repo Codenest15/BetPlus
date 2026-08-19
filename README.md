@@ -38,5 +38,10 @@ Uses `ADMIN_ONLY=true`. Sign in with a FastAPI admin user (`admin@betplus.com` /
 | `npm run dev` | Public betting app |
 | `npm run dev:admin` | Admin-only portal |
 | `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript `--noEmit` |
 | `npm run build` | Production build |
 | `npm start` | Serve production build |
+| `npm run test:e2e` | Playwright smoke tests (requires running apps) |
+
+Deployment: [DEPLOY.md](./DEPLOY.md)
+

@@ -113,3 +113,23 @@ def test_settings_persist(client):
 
     me = client.get("/api/v1/auth/me", headers=headers).json()
     assert me["settings"]["managerMode"] is True
+
+
+def test_weak_password_rejected(client):
+    resp = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Weak", "email": "weak@example.com", "password": "123"},
+    )
+    assert resp.status_code == 422
+
+
+def test_invalid_login_rejected(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={"name": "Lock", "email": "lock@example.com", "password": "secret"},
+    )
+    resp = client.post(
+        "/api/v1/auth/login",
+        data={"username": "lock@example.com", "password": "wrong"},
+    )
+    assert resp.status_code == 401

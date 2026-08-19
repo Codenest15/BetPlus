@@ -1,14 +1,15 @@
 import uuid
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     Numeric,
     String,
-    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -23,12 +24,17 @@ def new_uuid() -> str:
 
 class Bet(Base):
     __tablename__ = "bets"
+    __table_args__ = (
+        CheckConstraint("stake > 0", name="ck_bets_stake_positive"),
+        Index("ix_bets_status", "status"),
+        Index("ix_bets_placed_at", "placed_at"),
+    )
 
     id = Column(String(36), primary_key=True, default=new_uuid)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     booking_code = Column(String(16), unique=True, index=True, nullable=False)
-    ticket_id = Column(String(16), nullable=True)
-    verify_code = Column(String(32), nullable=True, index=True)
+    ticket_id = Column(String(16), unique=True, index=True, nullable=True)
+    verify_code = Column(String(32), unique=True, index=True, nullable=True)
     stake = Column(Numeric(12, 2), nullable=False)
     total_odds = Column(Numeric(12, 4), nullable=False)
     potential_win = Column(Numeric(12, 2), nullable=False)

@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { clearSettledBets, getBetsByUser } from "@/lib/bet-store";
 import { getMyBets, useBackendApi } from "@/lib/backend-client";
 import { backendBetToPlacedBet } from "@/lib/backend-mappers";
+import { deferEffect } from "@/lib/defer-effect";
 import type { BetStatus, PlacedBet } from "@/lib/bet-types";
 
 export type TicketsTab = "open-bets" | "bet-history";
@@ -126,9 +127,11 @@ export function BetTicketsPanel({
   }, [user, backendMode]);
 
   useEffect(() => {
-    if (backendMode && user) {
-      void loadRemoteBets();
-    }
+    return deferEffect(() => {
+      if (backendMode && user) {
+        void loadRemoteBets();
+      }
+    });
   }, [backendMode, user, loadRemoteBets, refreshKey]);
 
   useEffect(() => {

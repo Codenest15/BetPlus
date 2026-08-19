@@ -18,6 +18,7 @@ import {
   useBackendApi,
 } from "@/lib/backend-client";
 import { backendBetToPlacedBet, backendTransactionToLocal, backendUserToLocal } from "@/lib/backend-mappers";
+import { deferEffect } from "@/lib/defer-effect";
 import { formatMoney } from "@/lib/utils";
 
 export default function AdminUserDetailPage() {
@@ -58,7 +59,9 @@ export default function AdminUserDetailPage() {
   }, [backendMode, userId]);
 
   useEffect(() => {
-    void load();
+    return deferEffect(() => {
+      void load();
+    });
   }, [load]);
 
   async function handleSetBalance(e: React.FormEvent) {

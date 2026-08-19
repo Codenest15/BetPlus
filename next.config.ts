@@ -1,8 +1,13 @@
 import type { NextConfig } from "next";
 
+// BACKEND_URL is read at build time on Vercel. Set it in the project env
+// and redeploy if the API origin changes.
 const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: process.cwd(),
+  },
   async rewrites() {
     return [
       {

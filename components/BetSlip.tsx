@@ -105,6 +105,7 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
             const remote = await apiPlaceBet({
               stake,
               selections: [localSelectionToBackend(sel)],
+              idempotencyKey: crypto.randomUUID(),
             });
             lastBet = backendBetToPlacedBet(remote);
           }
@@ -118,6 +119,7 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
             stake: betType === "single" ? stake : totalStake,
             selections: activeSelections.map(localSelectionToBackend),
             flex_cut: flexiEnabled ? 1 : undefined,
+            idempotencyKey: crypto.randomUUID(),
           });
           placedBet = backendBetToPlacedBet(remote);
         }

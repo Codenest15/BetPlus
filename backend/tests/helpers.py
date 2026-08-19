@@ -3,6 +3,7 @@ from app.models.game import Game
 from app.models.league import League
 from app.models.sport import Sport
 from app.models.user import User
+from app.services.catalog_service import build_seed_markets
 from app.services.referral_service import ReferralService
 
 
@@ -37,12 +38,14 @@ def promote_user(email: str, *, is_admin: bool = False, is_manager: bool = False
         db.close()
 
 
-def ensure_finished_game(
+def ensure_open_game(
     external_id: str = "m1",
     home: str = "Arsenal",
     away: str = "Chelsea",
-    home_score: int = 2,
-    away_score: int = 1,
+    odds_home: float = 2.0,
+    odds_draw: float | None = 3.4,
+    odds_away: float = 3.2,
+    status: str = "scheduled",
 ):
     db = SessionLocal()
     try:
@@ -57,6 +60,7 @@ def ensure_finished_game(
             db.add(league)
             db.flush()
         game = db.query(Game).filter(Game.external_id == external_id).first()
+        markets = build_seed_markets(home, away, odds_home, odds_draw, odds_away)
         if not game:
             game = Game(
                 external_id=external_id,
@@ -65,15 +69,55 @@ def ensure_finished_game(
                 away=away,
                 home_abbr=home[:3].upper(),
                 away_abbr=away[:3].upper(),
-                status="finished",
-                home_score=home_score,
-                away_score=away_score,
+                status=status,
+                odds_home=odds_home,
+                odds_draw=odds_draw,
+                odds_away=odds_away,
+                markets=markets,
             )
             db.add(game)
         else:
-            game.status = "finished"
-            game.home_score = home_score
-            game.away_score = away_score
+            game.status = status
+            game.odds_home = odds_home
+            game.odds_draw = odds_draw
+            game.odds_away = odds_away
+            game.markets = markets
+            if status == "scheduled":
+                game.home_score = None
+                game.away_score = None
+        db.commit()
+        return game.external_id
+    finally:
+        db.close()
+
+
+def ensure_finished_game(
+    external_id: str = "m1",
+    home: str = "Arsenal",
+    away: str = "Chelsea",
+    home_score: int = 2,
+    away_score: int = 1,
+    odds_home: float = 2.0,
+    odds_draw: float | None = 3.4,
+    odds_away: float = 3.2,
+):
+    ensure_open_game(
+        external_id=external_id,
+        home=home,
+        away=away,
+        odds_home=odds_home,
+        odds_draw=odds_draw,
+        odds_away=odds_away,
+        status="finished",
+    )
+    db = SessionLocal()
+    try:
+        game = db.query(Game).filter(Game.external_id == external_id).first()
+        assert game is not None
+        game.status = "finished"
+        game.home_score = home_score
+        game.away_score = away_score
+        db.add(game)
         db.commit()
     finally:
         db.close()

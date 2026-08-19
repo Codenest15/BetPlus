@@ -61,6 +61,8 @@ class GameOut(BaseModel):
     id: int
     external_id: str
     league_id: int
+    league_name: str | None = None
+    sport: str | None = None
     home: str
     away: str
     home_abbr: str | None = None
@@ -74,6 +76,7 @@ class GameOut(BaseModel):
     odds_home: float | None = None
     odds_draw: float | None = None
     odds_away: float | None = None
+    markets: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TransactionOut(BaseModel):
@@ -99,7 +102,7 @@ class BetSelectionIn(BaseModel):
     away_team: str
     selection: str
     selection_label: str
-    odds: float = Field(gt=0)
+    odds: float | None = Field(default=None, gt=0)
     league: str = ""
     market_id: str | None = None
     market_name: str | None = None
@@ -261,3 +264,26 @@ class ManagerLegPatch(BaseModel):
     outcome_status: str | None = None
     ft_home_score: int | None = Field(default=None, ge=0)
     ft_away_score: int | None = Field(default=None, ge=0)
+
+
+class PaymentInitiateIn(BaseModel):
+    amount: float = Field(gt=0)
+    channel: str | None = Field(default="mobile_money", max_length=32)
+    destination: str | None = Field(default=None, max_length=255)
+
+
+class PaymentIntentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    provider: str
+    kind: str
+    provider_ref: str
+    amount: float
+    currency: str
+    status: str
+    channel: str | None = None
+    authorization_url: str | None = None
+    created_at: datetime | None = None
+    completed_at: datetime | None = None

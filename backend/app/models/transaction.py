@@ -20,7 +20,7 @@ class Transaction(Base):
     type = Column(String(32), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     user = relationship("User", back_populates="transactions")
     bet = relationship("Bet", back_populates="transactions")

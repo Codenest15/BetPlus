@@ -23,6 +23,8 @@ export interface Match {
     draw: number;
     away: number;
   };
+  /** Server-provided markets. When present, UI must not invent odds. */
+  markets?: BettingMarket[];
 }
 
 export interface BetSelection {

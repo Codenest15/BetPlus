@@ -39,7 +39,10 @@ export async function POST(request: Request) {
     const password = body.password ?? "";
 
     const accessToken = await tryFastApiAdmin(email, password);
-    const envOk = verifyAdminCredentials(email, password);
+    const envOk =
+      process.env.NODE_ENV !== "production" &&
+      process.env.NEXT_PUBLIC_USE_BACKEND !== "true" &&
+      verifyAdminCredentials(email, password);
 
     if (!accessToken && !envOk) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });

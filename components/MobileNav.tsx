@@ -8,6 +8,7 @@ import { useBetSlip } from "@/lib/betslip-context";
 import { getBetsByUser } from "@/lib/bet-store";
 import { getMyBets, useBackendApi } from "@/lib/backend-client";
 import { backendBetToPlacedBet } from "@/lib/backend-mappers";
+import { deferEffect } from "@/lib/defer-effect";
 
 const TABS = [
   { id: "sports", href: "/", label: "Sports", match: ["/"], icon: SportsIcon },
@@ -69,17 +70,19 @@ export function MobileNav() {
   const [remoteOpenCount, setRemoteOpenCount] = useState(0);
 
   useEffect(() => {
-    if (!user || !backendMode) {
-      setRemoteOpenCount(0);
-      return;
-    }
-    void getMyBets()
-      .then((bets) =>
-        setRemoteOpenCount(
-          bets.map(backendBetToPlacedBet).filter((b) => b.status === "open").length,
-        ),
-      )
-      .catch(() => setRemoteOpenCount(0));
+    return deferEffect(() => {
+      if (!user || !backendMode) {
+        setRemoteOpenCount(0);
+        return;
+      }
+      void getMyBets()
+        .then((bets) =>
+          setRemoteOpenCount(
+            bets.map(backendBetToPlacedBet).filter((b) => b.status === "open").length,
+          ),
+        )
+        .catch(() => setRemoteOpenCount(0));
+    });
   }, [user, backendMode, betsRevision]);
 
   useEffect(() => {

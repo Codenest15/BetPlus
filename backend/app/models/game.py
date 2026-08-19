@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text
 from sqlalchemy.sql import func
 
 from app.db.base import Base
@@ -6,10 +6,14 @@ from app.db.base import Base
 
 class Game(Base):
     __tablename__ = "games"
+    __table_args__ = (
+        Index("ix_games_status", "status"),
+        Index("ix_games_starts_at", "starts_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     external_id = Column(String(64), unique=True, index=True, nullable=False)
-    league_id = Column(Integer, ForeignKey("leagues.id"), nullable=False)
+    league_id = Column(Integer, ForeignKey("leagues.id"), nullable=False, index=True)
     home = Column(String, nullable=False)
     away = Column(String, nullable=False)
     home_abbr = Column(String(8), nullable=True)
@@ -27,6 +31,7 @@ class Game(Base):
     manager_controlled = Column(Boolean, default=False, nullable=False)
     manager_note = Column(Text, nullable=True)
     is_manual = Column(Boolean, default=False, nullable=False)
+    markets = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

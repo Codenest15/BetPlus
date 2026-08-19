@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,13 +12,16 @@ from app.core.logging import init_logging
 from app.db.session import init_db
 from app.seed import seed_demo_data
 
+logger = logging.getLogger("app.middleware")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_logging()
     settings = get_settings()
+    settings.validate_for_runtime()
     init_db()
-    if settings.seed_demo_data:
+    if settings.should_seed_demo:
         seed_demo_data()
     yield
 
@@ -30,18 +34,23 @@ if settings.cors_origin_list:
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Webhook-Signature", "X-Paystack-Signature"],
     )
 
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    from logging import getLogger
-
-    logger = getLogger("app.middleware")
-    logger.info("%s %s", request.method, request.url)
-    response: Response = await call_next(request)
+    logger.info("%s %s", request.method, request.url.path)
+    try:
+        response: Response = await call_next(request)
+    except Exception:
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        raise
+    if response.status_code >= 400:
+        logger.warning(
+            "%s %s -> %s", request.method, request.url.path, response.status_code
+        )
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")

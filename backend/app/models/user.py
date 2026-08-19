@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, JSON, Numeric, String
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, JSON, Numeric, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -13,6 +13,9 @@ def new_uuid() -> str:
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint("balance >= 0", name="ck_users_balance_nonneg"),
+    )
 
     id = Column(String(36), primary_key=True, default=new_uuid)
     name = Column(String(255), nullable=False, default="")

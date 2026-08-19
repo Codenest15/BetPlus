@@ -12,6 +12,7 @@ import {
   verifyCode,
 } from "@/lib/ticket-display";
 import { formatMoney } from "@/lib/utils";
+import { deferEffect } from "@/lib/defer-effect";
 import {
   hasSeenWinCelebration,
   markWinCelebrationSeen,
@@ -39,9 +40,11 @@ export function TicketDetails({ bet, onBetUpdate }: TicketDetailsProps) {
   const [showWinModal, setShowWinModal] = useState(false);
 
   useEffect(() => {
-    if (isWon && !hasSeenWinCelebration(bet.id)) {
-      setShowWinModal(true);
-    }
+    return deferEffect(() => {
+      if (isWon && !hasSeenWinCelebration(bet.id)) {
+        setShowWinModal(true);
+      }
+    });
   }, [bet.id, isWon]);
 
   function dismissWinCelebration() {

@@ -7,6 +7,7 @@ import {
   type LegOutcomeStatus,
 } from "@/lib/bet-store";
 import { managerUpdateLeg, useBackendApi } from "@/lib/backend-client";
+import { deferEffect } from "@/lib/defer-effect";
 import {
   buildLegMarketCatalog,
   findLegMarketEntry,
@@ -336,16 +337,16 @@ export function ManagerLegEditModal({
   }
 
   useEffect(() => {
-    if (!open) return;
-
-    const ft = initialFtScores(selection, ftScore ?? null);
-    setFtHome(ft.home);
-    setFtAway(ft.away);
-    setOdds(String(selection.odds));
-    setOutcomeStatus(detectOutcomeStatus(legWon, voidLeg));
-    setOutcomeLabel(selection.outcomeLabel ?? selection.selectionLabel);
-    setCustomPick(normalizeTicketScoreLabel(selection.selectionLabel));
-    setError("");
+    if (!open) return undefined;
+    return deferEffect(() => {
+      const ft = initialFtScores(selection, ftScore ?? null);
+      setFtHome(ft.home);
+      setFtAway(ft.away);
+      setOdds(String(selection.odds));
+      setOutcomeStatus(detectOutcomeStatus(legWon, voidLeg));
+      setOutcomeLabel(selection.outcomeLabel ?? selection.selectionLabel);
+      setCustomPick(normalizeTicketScoreLabel(selection.selectionLabel));
+      setError("");
 
     if (match) {
       const entry = findLegMarketEntry(match, selection);
@@ -359,6 +360,7 @@ export function ManagerLegEditModal({
       setMarketSearch("");
       setSelectedPickId(CUSTOM_PICK_ID);
     }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when modal opens
   }, [open, selection, legWon, voidLeg, ftScore, match]);
 

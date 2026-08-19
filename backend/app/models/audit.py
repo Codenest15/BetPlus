@@ -21,4 +21,4 @@ class AuditLog(Base):
     bet_id = Column(String(36), nullable=True)
     match_id = Column(String(64), nullable=True)
     booking_code = Column(String(16), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

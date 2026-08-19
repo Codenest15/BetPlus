@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.game import Game
 from app.models.league import League
 from app.models.sport import Sport
+from app.services.catalog_service import build_seed_markets
 from app.services.bet_service import SettlementService
 
 VALID_MANAGER_STATUSES = frozenset({"not_started", "won", "lost", "void"})
@@ -129,6 +130,10 @@ class ManagerService:
             is_manual=True,
             home_score=0,
             away_score=0,
+            odds_home=1.85,
+            odds_draw=3.20,
+            odds_away=2.10,
+            markets=build_seed_markets(home_team.strip(), away_team.strip(), 1.85, 3.20, 2.10),
         )
         db.add(game)
         db.commit()

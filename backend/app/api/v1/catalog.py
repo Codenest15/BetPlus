@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -8,6 +8,7 @@ from app.models.game import Game
 from app.models.league import League
 from app.models.sport import Sport
 from app.schemas import GameOut, LeagueOut, SportOut
+from app.services.catalog_service import catalog_game_view
 
 router = APIRouter()
 
@@ -26,29 +27,26 @@ def list_leagues(sport_id: int | None = None, db: Session = Depends(get_db)):
 
 
 @router.get("/games", response_model=List[GameOut])
-def list_games(league_id: int | None = None, db: Session = Depends(get_db)):
+def list_games(
+    league_id: int | None = None,
+    sport: str | None = None,
+    live: bool | None = None,
+    db: Session = Depends(get_db),
+):
     q = db.query(Game)
     if league_id:
         q = q.filter(Game.league_id == league_id)
-    games = q.all()
-    return [
-        GameOut(
-            id=g.id,
-            external_id=g.external_id,
-            league_id=g.league_id,
-            home=g.home,
-            away=g.away,
-            home_abbr=g.home_abbr,
-            away_abbr=g.away_abbr,
-            starts_at=g.starts_at,
-            status=g.status,
-            is_live=bool(g.is_live),
-            live_minute=g.live_minute,
-            home_score=g.home_score,
-            away_score=g.away_score,
-            odds_home=float(g.odds_home) if g.odds_home is not None else None,
-            odds_draw=float(g.odds_draw) if g.odds_draw is not None else None,
-            odds_away=float(g.odds_away) if g.odds_away is not None else None,
-        )
-        for g in games
-    ]
+    if sport:
+        q = q.join(League).join(Sport).filter(Sport.slug == sport)
+    if live is True:
+        q = q.filter(Game.is_live == 1)
+    games = q.order_by(Game.starts_at.asc()).all()
+    return [GameOut.model_validate(catalog_game_view(db, g)) for g in games]
+
+
+@router.get("/games/{external_id}", response_model=GameOut)
+def get_game(external_id: str, db: Session = Depends(get_db)):
+    game = db.query(Game).filter(Game.external_id == external_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Match not found")
+    return GameOut.model_validate(catalog_game_view(db, game))

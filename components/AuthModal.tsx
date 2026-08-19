@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { deferEffect } from "@/lib/defer-effect";
 import {
   findManagerByReferralCode,
   getPendingReferralCode,
@@ -140,13 +141,15 @@ function RegisterForm({
   const [referrerName, setReferrerName] = useState<string | null>(null);
 
   useEffect(() => {
-    const code = getPendingReferralCode();
-    if (!code) {
-      setReferrerName(null);
-      return;
-    }
-    const manager = findManagerByReferralCode(code);
-    setReferrerName(manager?.name ?? null);
+    return deferEffect(() => {
+      const code = getPendingReferralCode();
+      if (!code) {
+        setReferrerName(null);
+        return;
+      }
+      const manager = findManagerByReferralCode(code);
+      setReferrerName(manager?.name ?? null);
+    });
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {

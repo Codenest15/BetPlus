@@ -20,6 +20,7 @@ import {
   useBackendApi,
 } from "@/lib/backend-client";
 import { formatMoney } from "@/lib/utils";
+import { deferEffect } from "@/lib/defer-effect";
 
 export default function AdminDashboardPage() {
   const backendMode = useBackendApi();
@@ -108,7 +109,9 @@ export default function AdminDashboardPage() {
   }, [backendMode]);
 
   useEffect(() => {
-    void reload();
+    return deferEffect(() => {
+      void reload();
+    });
   }, [reload]);
 
   return (

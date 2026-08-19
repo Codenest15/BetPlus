@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { deferEffect } from "@/lib/defer-effect";
 import { ManagerGate } from "@/components/manager/ManagerGate";
 import { ManagerStatusSelect } from "@/components/manager/ManagerStatusSelect";
 import { reconcileBetsForMatch } from "@/lib/bet-store";
@@ -99,7 +100,9 @@ export default function ManagerMatchDetailPage() {
   }
 
   useEffect(() => {
-    void load();
+    return deferEffect(() => {
+      void load();
+    });
   }, [matchId, backendMode]);
 
   const phase = match ? getMatchPhase(match.kickoff) : "before_kickoff";

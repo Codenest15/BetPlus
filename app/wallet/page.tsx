@@ -9,10 +9,10 @@ import { trackReferralDeposit } from "@/lib/referral-store";
 import { updateUserBalance } from "@/lib/auth-store";
 import {
   ApiError,
-  deposit as apiDeposit,
+  initiateDeposit,
+  initiateWithdrawal,
   getTransactions as apiGetTransactions,
   useBackendApi,
-  withdraw as apiWithdraw,
 } from "@/lib/backend-client";
 import { backendTransactionToLocal } from "@/lib/backend-mappers";
 import type { Transaction } from "@/lib/bet-types";
@@ -35,6 +35,7 @@ import {
   type WithdrawMethod,
 } from "@/lib/payment-methods";
 import { CURRENCY_SYMBOL, formatMoney } from "@/lib/utils";
+import { deferEffect } from "@/lib/defer-effect";
 
 const DEPOSIT_AMOUNTS = [20, 50, 100, 200, 500];
 const WITHDRAW_AMOUNTS = [20, 50, 100, 200];
@@ -122,13 +123,15 @@ export default function WalletPage() {
   }, [user, backendMode]);
 
   useEffect(() => {
-    if (!user) {
-      setTransactions([]);
-      return;
-    }
-    if (backendMode) {
-      void loadTransactions();
-    }
+    return deferEffect(() => {
+      if (!user) {
+        setTransactions([]);
+        return;
+      }
+      if (backendMode) {
+        void loadTransactions();
+      }
+    });
   }, [user, backendMode, loadTransactions]);
 
   if (!user) {
@@ -167,7 +170,15 @@ export default function WalletPage() {
     if (backendMode) {
       setSubmitting(true);
       try {
-        await apiDeposit(amount, description);
+        const payment = await initiateDeposit(amount, "mobile_money");
+        if (payment.authorization_url) {
+          window.location.href = payment.authorization_url;
+          return true;
+        }
+        if (payment.status !== "completed") {
+          setError("Payment is pending confirmation");
+          return false;
+        }
         await refreshUser();
         await loadTransactions();
         setCryptoStep(false);
@@ -288,7 +299,7 @@ export default function WalletPage() {
     if (backendMode) {
       setSubmitting(true);
       try {
-        await apiWithdraw(amount, description);
+        await initiateWithdrawal(amount, "mobile_money", description);
         await refreshUser();
         await loadTransactions();
         setMessage(`Withdrawal of ${formatMoney(amount)} submitted`);

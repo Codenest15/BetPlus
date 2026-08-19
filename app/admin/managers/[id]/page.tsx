@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
 import { AdminManagerReferralDetail } from "@/components/admin/AdminManagerReferralDetail";
 import { getUserById } from "@/lib/auth-store";
+import { deferEffect } from "@/lib/defer-effect";
 import type { User } from "@/lib/user-types";
 
 export default function AdminManagerDetailPage() {
@@ -14,7 +15,9 @@ export default function AdminManagerDetailPage() {
   const [manager, setManager] = useState<User | null | undefined>(undefined);
 
   useEffect(() => {
-    setManager(getUserById(managerId));
+    return deferEffect(() => {
+      setManager(getUserById(managerId));
+    });
   }, [managerId]);
 
   if (manager === undefined) {

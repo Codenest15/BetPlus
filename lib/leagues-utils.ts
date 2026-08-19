@@ -5,6 +5,7 @@ import {
   type LeagueEntry,
 } from "./leagues-data";
 import { MATCHES } from "./mock-data";
+import { isBackendEnabled } from "./backend-client";
 import type { Match, Sport } from "./types";
 
 const PLACEHOLDER_TEAMS: Record<Sport, [string, string, string, string][]> = {
@@ -80,6 +81,7 @@ export function getMatchesForLeague(leagueId: string): Match[] {
   );
 
   if (existing.length > 0) return existing;
+  if (isBackendEnabled()) return [];
   return generatePlaceholderMatches(league);
 }
 
@@ -90,6 +92,7 @@ export function countMatchesForLeague(leagueId: string): number {
 export function getMatchesForSport(sport: Sport): Match[] {
   const fromData = MATCHES.filter((m) => m.sport === sport);
   if (fromData.length > 0) return fromData;
+  if (isBackendEnabled()) return [];
 
   const league = getLeagueById(
     sport === "basketball"

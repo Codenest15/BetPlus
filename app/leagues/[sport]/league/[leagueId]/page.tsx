@@ -7,7 +7,7 @@ import {
   isValidSport,
   sportLabel,
 } from "@/lib/leagues-data";
-import { getMatchesForLeague } from "@/lib/leagues-utils";
+import { getLeagueMatchesForPage } from "@/lib/catalog";
 
 interface LeagueMatchesPageProps {
   params: Promise<{ sport: string; leagueId: string }>;
@@ -23,7 +23,7 @@ export default async function LeagueMatchesPage({
   if (!league || league.sport !== sportParam) notFound();
 
   const country = getCountryById(league.countryId);
-  const matches = getMatchesForLeague(leagueId);
+  const matches = await getLeagueMatchesForPage(leagueId, league.name, league.sport);
 
   return (
     <div className="space-y-4">

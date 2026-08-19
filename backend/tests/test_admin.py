@@ -52,11 +52,12 @@ def test_admin_lists_users_and_credits(client):
 
 
 def test_admin_grant_manager_and_settle_bet(client):
-    from tests.helpers import ensure_finished_game
+    from tests.helpers import ensure_open_game
 
     user_token = register_and_token(client, "settle-user@example.com")
     admin_token = register_and_token(client, "settle-admin@example.com")
     promote_user("settle-admin@example.com", is_admin=True)
+    ensure_open_game("m1", odds_home=2.0)
 
     client.post(
         "/api/v1/wallet/deposit",
@@ -95,7 +96,6 @@ def test_admin_grant_manager_and_settle_bet(client):
     me = client.get("/api/v1/auth/me", headers=auth_headers(user_token)).json()
     assert me["balance"] == 60
 
-    ensure_finished_game()
     grant = client.patch(
         f"/api/v1/admin/users/{client.get('/api/v1/auth/me', headers=auth_headers(user_token)).json()['id']}",
         json={"is_manager": True},

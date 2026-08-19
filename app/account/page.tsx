@@ -6,6 +6,7 @@ import { AccountGuest } from "@/components/AccountGuest";
 import { AccountProfile } from "@/components/AccountProfile";
 import { PersonalSettings } from "@/components/PersonalSettings";
 import { useAuth } from "@/lib/auth-context";
+import { deferEffect } from "@/lib/defer-effect";
 
 type SettingsTab = "profile" | "password" | "preferences";
 
@@ -20,10 +21,12 @@ function AccountPageContent() {
   }, [refreshUser]);
 
   useEffect(() => {
-    if (searchParams.get("open") === "profile") {
-      setSettingsTab("profile");
-      setView("settings");
-    }
+    return deferEffect(() => {
+      if (searchParams.get("open") === "profile") {
+        setSettingsTab("profile");
+        setView("settings");
+      }
+    });
   }, [searchParams]);
 
   if (isLoading) {

@@ -1,15 +1,42 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { MatchRow } from "@/components/MatchRow";
-import { getLiveMatches } from "@/lib/mock-data";
+import { getMatchesForPage } from "@/lib/catalog";
+import type { Match } from "@/lib/types";
 
 export default function LivePage() {
-  const liveMatches = getLiveMatches();
+  const [liveMatches, setLiveMatches] = useState<Match[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    getMatchesForPage({ live: true })
+      .then((data) => {
+        if (!cancelled) setLiveMatches(data.filter((m) => m.isLive));
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load live matches");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-3">
       <PageHeader icon="live" title="Live" subtitle="In-play markets" />
 
-      {liveMatches.length === 0 ? (
+      {loading ? (
+        <p className="py-8 text-center text-xs text-muted">Loading live matches…</p>
+      ) : error ? (
+        <p className="py-8 text-center text-xs text-live">{error}</p>
+      ) : liveMatches.length === 0 ? (
         <div className="rounded-lg border border-border bg-surface py-10 text-center text-xs text-muted">
           Nothing live right now
         </div>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { getUpcomingMatches } from "@/lib/mock-data";
-import type { Sport } from "@/lib/types";
+import { useEffect, useMemo, useState } from "react";
+import { getMatchesForPage } from "@/lib/catalog";
+import { deferEffect } from "@/lib/defer-effect";
+import type { Match, Sport } from "@/lib/types";
 import { MatchRow } from "./MatchRow";
 import { SectionTabs, type SectionTab } from "./SectionTabs";
 import { SportTabs } from "./SportTabs";
@@ -10,12 +11,36 @@ import { SportTabs } from "./SportTabs";
 export function SportsHome() {
   const [sport, setSport] = useState<Sport | "all">("all");
   const [section, setSection] = useState<SectionTab>("all");
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const stop = deferEffect(() => {
+      getMatchesForPage({ sport })
+        .then((data) => {
+          if (!cancelled) setMatches(data);
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : "Failed to load matches");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    });
+    return () => {
+      cancelled = true;
+      stop();
+    };
+  }, [sport]);
 
   const upcoming = useMemo(() => {
-    const matches = getUpcomingMatches(sport === "all" ? undefined : sport);
     if (section === "soon") return matches.slice(0, 8);
     return matches;
-  }, [sport, section]);
+  }, [matches, section]);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, typeof upcoming>();
@@ -36,15 +61,19 @@ export function SportsHome() {
         </div>
       </div>
 
-      {grouped.length === 0 ? (
+      {loading ? (
+        <p className="py-8 text-center text-xs text-muted">Loading matches…</p>
+      ) : error ? (
+        <p className="py-8 text-center text-xs text-live">{error}</p>
+      ) : grouped.length === 0 ? (
         <p className="py-8 text-center text-xs text-muted">No matches found.</p>
       ) : (
-        grouped.map(([league, matches]) => (
+        grouped.map(([league, leagueMatches]) => (
           <section key={league} className="league-block">
             <h3 className="border-b border-border bg-surface-elevated px-3 py-2 text-xs font-semibold">
               {league}
             </h3>
-            {matches.map((match, index) => (
+            {leagueMatches.map((match, index) => (
               <MatchRow
                 key={match.id}
                 match={match}

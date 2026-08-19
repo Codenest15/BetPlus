@@ -9,6 +9,7 @@ from app.core.codes import generate_booking_code, generate_ticket_id, generate_v
 from app.core.money import to_decimal
 from app.models.bet import Bet, BetSelection
 from app.models.game import Game
+from app.services.catalog_service import price_selection
 from app.services.ledger_service import LedgerService
 from app.services.wallet_service import InsufficientBalanceError, WalletService
 
@@ -68,27 +69,50 @@ class BetService:
         if dec_stake <= 0:
             raise ValueError("Stake must be positive")
 
+        priced = []
         total_odds = Decimal("1")
         for sel in selections:
-            if sel.odds <= 0:
-                raise ValueError("Odds must be positive")
-            total_odds *= to_decimal(sel.odds)
+            resolved = price_selection(
+                db,
+                match_id=sel.match_id,
+                selection=sel.selection,
+                selection_label=sel.selection_label,
+                market_id=sel.market_id,
+            )
+            priced.append(resolved)
+            total_odds *= resolved.odds
 
         potential_win = (dec_stake * total_odds).quantize(Decimal("0.01"))
         bonus = (
             (potential_win * Decimal("0.04")).quantize(Decimal("0.01"))
-            if len(selections) >= 3
+            if len(priced) >= 3
             else Decimal("0")
         )
 
         existing_codes = {code for (code,) in db.query(Bet.booking_code).all()}
         booking_code = generate_booking_code(existing_codes)
+        ticket_ids = {
+            tid
+            for (tid,) in db.query(Bet.ticket_id).filter(Bet.ticket_id.isnot(None)).all()
+        }
+        verify_codes = {
+            vid
+            for (vid,) in db.query(Bet.verify_code)
+            .filter(Bet.verify_code.isnot(None))
+            .all()
+        }
+        ticket_id = generate_ticket_id()
+        while ticket_id in ticket_ids:
+            ticket_id = generate_ticket_id()
+        verify_code = generate_verify_code()
+        while verify_code in verify_codes:
+            verify_code = generate_verify_code()
 
         bet = Bet(
             user_id=user_id,
             booking_code=booking_code,
-            ticket_id=generate_ticket_id(),
-            verify_code=generate_verify_code(),
+            ticket_id=ticket_id,
+            verify_code=verify_code,
             stake=dec_stake,
             total_odds=total_odds,
             potential_win=potential_win,
@@ -99,30 +123,31 @@ class BetService:
         db.add(bet)
         db.flush()
 
-        for index, sel in enumerate(selections):
+        for index, resolved in enumerate(priced):
             snapshot = {
-                "matchId": sel.match_id,
-                "homeTeam": sel.home_team,
-                "awayTeam": sel.away_team,
-                "selection": sel.selection,
-                "selectionLabel": sel.selection_label,
-                "odds": sel.odds,
-                "league": sel.league,
+                "matchId": resolved.match_id,
+                "homeTeam": resolved.home_team,
+                "awayTeam": resolved.away_team,
+                "selection": resolved.selection,
+                "selectionLabel": resolved.selection_label,
+                "odds": float(resolved.odds),
+                "league": resolved.league,
+                "clientOddsIgnored": True,
             }
             db.add(
                 BetSelection(
                     bet_id=bet.id,
                     leg_index=index,
-                    match_id=sel.match_id,
-                    home_team=sel.home_team,
-                    away_team=sel.away_team,
-                    selection=sel.selection,
-                    selection_label=sel.selection_label,
-                    odds=to_decimal(sel.odds),
-                    league=sel.league,
-                    market_id=sel.market_id,
-                    market_name=sel.market_name,
-                    kickoff=sel.kickoff,
+                    match_id=resolved.match_id,
+                    home_team=resolved.home_team,
+                    away_team=resolved.away_team,
+                    selection=resolved.selection,
+                    selection_label=resolved.selection_label,
+                    odds=resolved.odds,
+                    league=resolved.league,
+                    market_id=resolved.market_id,
+                    market_name=resolved.market_name,
+                    kickoff=resolved.kickoff,
                     original_snapshot=snapshot,
                 )
             )
@@ -351,6 +376,15 @@ class SettlementService:
         force_status: str | None = None,
         commit: bool = True,
     ) -> Bet:
+        locked = (
+            db.query(Bet)
+            .filter(Bet.id == bet.id)
+            .with_for_update()
+            .first()
+        )
+        if not locked:
+            raise ValueError("Bet not found")
+        bet = locked
         if bet.status != "open":
             return bet
 

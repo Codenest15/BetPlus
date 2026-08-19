@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { deferEffect } from "@/lib/defer-effect";
 import { AdminGate } from "@/components/admin/AdminGate";
 import { SettleBetMenu } from "@/components/admin/SettleBetMenu";
 import { logAdminAction } from "@/lib/admin-store";
@@ -108,7 +109,9 @@ export default function AdminBetDetailPage() {
   }
 
   useEffect(() => {
-    void reload();
+    return deferEffect(() => {
+      void reload();
+    });
   }, [betId, backendMode]);
 
   const originalSelections = bet ? getBetOriginalSelections(bet) : [];

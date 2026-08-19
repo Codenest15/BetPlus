@@ -1,3 +1,6 @@
+from tests.helpers import ensure_open_game
+
+
 def register_and_token(client, email: str = "buser@example.com"):
     client.post(
         "/api/v1/auth/register",
@@ -29,10 +32,24 @@ def seed_wallet(client, token: str, amount: float = 100):
 def test_place_bet_and_list(client):
     token = register_and_token(client)
     seed_wallet(client, token)
+    ensure_open_game("m1", odds_home=2.5)
 
     resp = client.post(
-        "/api/v1/bets/place/simple",
-        json={"stake": 10, "odds": 2.5},
+        "/api/v1/bets/place",
+        json={
+            "stake": 10,
+            "selections": [
+                {
+                    "match_id": "m1",
+                    "home_team": "Arsenal",
+                    "away_team": "Chelsea",
+                    "selection": "home",
+                    "selection_label": "Home",
+                    "odds": 2.5,
+                    "league": "Premier League",
+                }
+            ],
+        },
         headers=auth_headers(token),
     )
     assert resp.status_code == 201
@@ -52,6 +69,9 @@ def test_place_bet_and_list(client):
 def test_place_multi_leg_bet(client):
     token = register_and_token(client, "multi@example.com")
     seed_wallet(client, token, 200)
+    ensure_open_game("m1", odds_home=2.1)
+    ensure_open_game("m2", home="Liverpool", away="Manchester City", odds_home=2.8, odds_draw=3.5, odds_away=2.45)
+    ensure_open_game("m3", home="Real Madrid", away="Barcelona", odds_home=2.1, odds_draw=3.6, odds_away=2.8)
     resp = client.post(
         "/api/v1/bets/place",
         json={
@@ -99,6 +119,7 @@ def test_place_multi_leg_bet(client):
 def test_place_bet_debits_balance_and_creates_transaction(client):
     token = register_and_token(client, "debit@example.com")
     seed_wallet(client, token, 100)
+    ensure_open_game("m1", odds_home=2.0)
 
     me_before = client.get("/api/v1/auth/me", headers=auth_headers(token)).json()
     assert me_before["balance"] == 100
@@ -138,6 +159,7 @@ def test_place_bet_debits_balance_and_creates_transaction(client):
 
 def test_insufficient_balance_rejected(client):
     token = register_and_token(client, "nobalance@example.com")
+    ensure_open_game("m1", odds_home=2.0)
     resp = client.post(
         "/api/v1/bets/place",
         json={
@@ -205,9 +227,23 @@ def test_unauthorized_bet_placement(client):
 def test_get_bet_by_booking_code(client):
     token = register_and_token(client, "lookup@example.com")
     seed_wallet(client, token)
+    ensure_open_game("m1", odds_home=1.5)
     placed = client.post(
-        "/api/v1/bets/place/simple",
-        json={"stake": 5, "odds": 1.5},
+        "/api/v1/bets/place",
+        json={
+            "stake": 5,
+            "selections": [
+                {
+                    "match_id": "m1",
+                    "home_team": "Arsenal",
+                    "away_team": "Chelsea",
+                    "selection": "home",
+                    "selection_label": "Home",
+                    "odds": 1.5,
+                    "league": "EPL",
+                }
+            ],
+        },
         headers=auth_headers(token),
     ).json()
 
@@ -219,12 +255,182 @@ def test_get_bet_by_booking_code(client):
 def test_get_bet_by_verify_code(client):
     token = register_and_token(client, "verify@example.com")
     seed_wallet(client, token)
+    ensure_open_game("m1", odds_home=1.5)
     placed = client.post(
-        "/api/v1/bets/place/simple",
-        json={"stake": 5, "odds": 1.5},
+        "/api/v1/bets/place",
+        json={
+            "stake": 5,
+            "selections": [
+                {
+                    "match_id": "m1",
+                    "home_team": "Arsenal",
+                    "away_team": "Chelsea",
+                    "selection": "home",
+                    "selection_label": "Home",
+                    "odds": 1.5,
+                    "league": "EPL",
+                }
+            ],
+        },
         headers=auth_headers(token),
     ).json()
 
     resp = client.get(f"/api/v1/bets/verify/{placed['verify_code']}")
     assert resp.status_code == 200
     assert resp.json()["booking_code"] == placed["booking_code"]
+
+
+def test_client_odds_are_ignored(client):
+    token = register_and_token(client, "tamper@example.com")
+    seed_wallet(client, token, 100)
+    ensure_open_game("m1", odds_home=2.0)
+
+    resp = client.post(
+        "/api/v1/bets/place",
+        json={
+            "stake": 10,
+            "selections": [
+                {
+                    "match_id": "m1",
+                    "home_team": "Arsenal",
+                    "away_team": "Chelsea",
+                    "selection": "home",
+                    "selection_label": "Home",
+                    "odds": 99.0,
+                    "league": "EPL",
+                }
+            ],
+        },
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 201
+    bet = resp.json()
+    assert abs(bet["total_odds"] - 2.0) < 0.001
+    assert abs(bet["potential_win"] - 20.0) < 0.001
+    assert abs(bet["selections"][0]["odds"] - 2.0) < 0.001
+
+
+def test_unknown_match_rejected(client):
+    token = register_and_token(client, "unknown-match@example.com")
+    seed_wallet(client, token)
+    resp = client.post(
+        "/api/v1/bets/place",
+        json={
+            "stake": 10,
+            "selections": [
+                {
+                    "match_id": "does-not-exist",
+                    "home_team": "A",
+                    "away_team": "B",
+                    "selection": "home",
+                    "selection_label": "Home",
+                    "odds": 2.0,
+                    "league": "EPL",
+                }
+            ],
+        },
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 400
+    me = client.get("/api/v1/auth/me", headers=auth_headers(token)).json()
+    assert me["balance"] == 100
+
+
+def test_closed_match_rejected(client):
+    token = register_and_token(client, "closed-match@example.com")
+    seed_wallet(client, token)
+    from tests.helpers import ensure_finished_game
+
+    ensure_finished_game("closed-m1", odds_home=2.0)
+    resp = client.post(
+        "/api/v1/bets/place",
+        json={
+            "stake": 10,
+            "selections": [
+                {
+                    "match_id": "closed-m1",
+                    "home_team": "Arsenal",
+                    "away_team": "Chelsea",
+                    "selection": "home",
+                    "selection_label": "Home",
+                    "odds": 2.0,
+                    "league": "EPL",
+                }
+            ],
+        },
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 400
+
+
+def test_idempotent_bet_placement(client):
+    token = register_and_token(client, "idem@example.com")
+    seed_wallet(client, token, 100)
+    ensure_open_game("m1", odds_home=2.0)
+    payload = {
+        "stake": 10,
+        "selections": [
+            {
+                "match_id": "m1",
+                "home_team": "Arsenal",
+                "away_team": "Chelsea",
+                "selection": "home",
+                "selection_label": "Home",
+                "odds": 2.0,
+                "league": "EPL",
+            }
+        ],
+    }
+    headers = {**auth_headers(token), "Idempotency-Key": "same-click-1"}
+    first = client.post("/api/v1/bets/place", json=payload, headers=headers)
+    second = client.post("/api/v1/bets/place", json=payload, headers=headers)
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+    bets = client.get("/api/v1/bets/my", headers=auth_headers(token)).json()
+    assert len(bets) == 1
+    me = client.get("/api/v1/auth/me", headers=auth_headers(token)).json()
+    assert me["balance"] == 90
+
+
+def test_idempotency_key_conflict(client):
+    token = register_and_token(client, "idem-conflict@example.com")
+    seed_wallet(client, token, 100)
+    ensure_open_game("m1", odds_home=2.0)
+    headers = {**auth_headers(token), "Idempotency-Key": "same-click-2"}
+    first = client.post(
+        "/api/v1/bets/place",
+        json={
+            "stake": 10,
+            "selections": [
+                {
+                    "match_id": "m1",
+                    "home_team": "Arsenal",
+                    "away_team": "Chelsea",
+                    "selection": "home",
+                    "selection_label": "Home",
+                    "odds": 2.0,
+                }
+            ],
+        },
+        headers=headers,
+    )
+    assert first.status_code == 201
+    conflict = client.post(
+        "/api/v1/bets/place",
+        json={
+            "stake": 20,
+            "selections": [
+                {
+                    "match_id": "m1",
+                    "home_team": "Arsenal",
+                    "away_team": "Chelsea",
+                    "selection": "home",
+                    "selection_label": "Home",
+                    "odds": 2.0,
+                }
+            ],
+        },
+        headers=headers,
+    )
+    assert conflict.status_code == 409

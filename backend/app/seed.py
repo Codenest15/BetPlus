@@ -2,12 +2,14 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.security import get_password_hash
 from app.db.session import SessionLocal
 from app.models.game import Game
 from app.models.league import League
 from app.models.sport import Sport
 from app.models.user import User
+from app.services.catalog_service import build_seed_markets
 from app.services.referral_service import ReferralService
 
 
@@ -98,6 +100,7 @@ def seed_demo_data():
                     odds_home=oh,
                     odds_draw=od,
                     odds_away=oa,
+                    markets=build_seed_markets(home, away, oh, od, oa),
                 )
                 for fid, league_id, home, away, home_abbr, away_abbr, hours, oh, od, oa in fixtures
             ]
@@ -118,6 +121,9 @@ def seed_demo_data():
                     odds_home=2.40,
                     odds_draw=2.80,
                     odds_away=3.10,
+                    markets=build_seed_markets(
+                        "Manchester United", "Tottenham", 2.40, 2.80, 3.10
+                    ),
                 )
             )
             games.append(
@@ -133,35 +139,39 @@ def seed_demo_data():
                     odds_home=1.90,
                     odds_draw=None,
                     odds_away=1.95,
+                    markets=build_seed_markets(
+                        "Los Angeles Lakers", "Boston Celtics", 1.90, None, 1.95
+                    ),
                 )
             )
             db.add_all(games)
             db.commit()
 
-        _ensure_user(
-            db,
-            name="Demo Admin",
-            email="demo@betplus.local",
-            phone="+10000000001",
-            password="demo123",
-            is_admin=True,
-        )
-        _ensure_user(
-            db,
-            name="Platform Admin",
-            email="admin@betplus.com",
-            phone="+10000000002",
-            password="admin123",
-            is_admin=True,
-        )
-        _ensure_user(
-            db,
-            name="Demo Manager",
-            email="manager@betplus.local",
-            phone="+10000000003",
-            password="manager123",
-            is_manager=True,
-        )
-        db.commit()
+        if get_settings().should_seed_demo_users:
+            _ensure_user(
+                db,
+                name="Demo Admin",
+                email="demo@betplus.local",
+                phone="+10000000001",
+                password="demo123",
+                is_admin=True,
+            )
+            _ensure_user(
+                db,
+                name="Platform Admin",
+                email="admin@betplus.com",
+                phone="+10000000002",
+                password="admin123",
+                is_admin=True,
+            )
+            _ensure_user(
+                db,
+                name="Demo Manager",
+                email="manager@betplus.local",
+                phone="+10000000003",
+                password="manager123",
+                is_manager=True,
+            )
+            db.commit()
     finally:
         db.close()

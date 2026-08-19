@@ -34,6 +34,18 @@ yarn-error.log*
 .env*
 !.env.example
 
+# python / backend
+__pycache__/
+*.py[cod]
+.pytest_cache/
+backend/*.db
+*.db
+
+# playwright
+/playwright-report/
+/test-results/
+/blob-report/
+
 # vercel
 .vercel
 

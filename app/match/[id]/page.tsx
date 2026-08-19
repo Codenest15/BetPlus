@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { MatchMarkets } from "@/components/MatchMarkets";
-import { getMatchById } from "@/lib/mock-data";
+import { getMatchForPage } from "@/lib/catalog";
 
 export default async function MatchPage({
   params,
@@ -8,7 +8,7 @@ export default async function MatchPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const match = getMatchById(id);
+  const match = await getMatchForPage(id);
 
   if (!match) notFound();
 

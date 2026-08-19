@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { deferEffect } from "@/lib/defer-effect";
 import { ManagerGate } from "@/components/manager/ManagerGate";
 import { ManagerStatusSelect } from "@/components/manager/ManagerStatusSelect";
 import { reconcileBetsForMatch } from "@/lib/bet-store";
@@ -62,10 +63,12 @@ function MatchesContent() {
   }
 
   useEffect(() => {
-    void reload();
-    const d = new Date();
-    d.setHours(d.getHours() + 2, 0, 0, 0);
-    setKickoff((prev) => prev || d.toISOString().slice(0, 16));
+    return deferEffect(() => {
+      void reload();
+      const d = new Date();
+      d.setHours(d.getHours() + 2, 0, 0, 0);
+      setKickoff((prev) => prev || d.toISOString().slice(0, 16));
+    });
   }, [backendMode]);
 
   const filtered = matches.filter((m) => {
