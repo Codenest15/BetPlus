@@ -7,6 +7,9 @@ import {
   placeBetForUser,
   saveSharedSlipCode,
 } from "@/lib/bet-store";
+import { ApiError, placeBet as apiPlaceBet, useBackendApi } from "@/lib/backend-client";
+import { backendBetToPlacedBet, localSelectionToBackend } from "@/lib/backend-mappers";
+import type { PlacedBet } from "@/lib/bet-types";
 import { formatMoney, formatOdds } from "@/lib/utils";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,6 +24,7 @@ interface BetSlipProps {
 
 export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
   const router = useRouter();
+  const backendMode = useBackendApi();
   const slipRef = useRef<HTMLElement>(null);
   const { user, openLogin, refreshUser } = useAuth();
   const {
@@ -34,6 +38,8 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
     setBetMode,
     slipTab,
     setSlipTab,
+    flexiEnabled,
+    setFlexiEnabled,
     removeSelection,
     clearSlip,
     totalOdds,
@@ -64,8 +70,9 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
     !!user &&
     totalStake <= user.balance;
 
-  function handlePlaceBet() {
+  async function handlePlaceBet() {
     setError("");
+    if (placing) return;
     if (betMode === "sim") {
       setError("Switch to REAL mode to place a bet");
       return;
@@ -88,26 +95,66 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
     }
 
     setPlacing(true);
-    const result = placeBetForUser({
-      userId: user.id,
-      selections: [...activeSelections],
-      stake: totalStake,
-      totalOdds,
-      potentialWin,
-    });
-    if ("error" in result) {
-      setError(result.error);
+    try {
+      if (backendMode) {
+        let placedBet: PlacedBet;
+
+        if (betType === "single" && activeSelections.length > 1) {
+          let lastBet: PlacedBet | null = null;
+          for (const sel of activeSelections) {
+            const remote = await apiPlaceBet({
+              stake,
+              selections: [localSelectionToBackend(sel)],
+              idempotencyKey: crypto.randomUUID(),
+            });
+            lastBet = backendBetToPlacedBet(remote);
+          }
+          if (!lastBet) {
+            setError("Failed to place bet");
+            return;
+          }
+          placedBet = lastBet;
+        } else {
+          const remote = await apiPlaceBet({
+            stake: betType === "single" ? stake : totalStake,
+            selections: activeSelections.map(localSelectionToBackend),
+            flex_cut: flexiEnabled ? 1 : undefined,
+            idempotencyKey: crypto.randomUUID(),
+          });
+          placedBet = backendBetToPlacedBet(remote);
+        }
+
+        await refreshUser();
+        clearSlip();
+        window.dispatchEvent(new CustomEvent("betplus:bets-updated"));
+        if (onClose) onClose();
+        router.push(`/bet/${placedBet.bookingCode}`);
+        return;
+      }
+
+      const result = placeBetForUser({
+        userId: user.id,
+        selections: [...activeSelections],
+        stake: totalStake,
+        totalOdds,
+        potentialWin,
+      });
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+
+      refreshUser();
+      const { bet } = result;
+      clearSlip();
+      window.dispatchEvent(new CustomEvent("betplus:bets-updated"));
+      if (onClose) onClose();
+      router.push(`/bet/${bet.bookingCode}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to place bet");
+    } finally {
       setPlacing(false);
-      return;
     }
-
-    refreshUser();
-    const { bet } = result;
-
-    clearSlip();
-    setPlacing(false);
-    if (onClose) onClose();
-    router.push(`/bet/${bet.bookingCode}`);
   }
 
   function handleBookBet() {

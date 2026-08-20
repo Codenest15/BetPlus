@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { adminLogout, checkAdminSession } from "@/lib/admin-store";
+import { useBackendApi } from "@/lib/backend-client";
 import { seedUser1DemoSlip } from "@/lib/demo-seed";
 
 export function AdminGate({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const backendMode = useBackendApi();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -20,7 +22,9 @@ export function AdminGate({ children }: { children: ReactNode }) {
         router.replace("/admin/login");
         return;
       }
-      seedUser1DemoSlip();
+      if (!backendMode) {
+        seedUser1DemoSlip();
+      }
       setReady(true);
     }
 
@@ -28,7 +32,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, backendMode]);
 
   if (!ready) {
     return (

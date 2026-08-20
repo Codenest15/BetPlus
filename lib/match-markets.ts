@@ -33,6 +33,9 @@ export function getMarketCategoriesForMatch(match: Match) {
 }
 
 export function getMarketsForMatch(match: Match): BettingMarket[] {
+  if (match.markets && match.markets.length > 0) {
+    return match.markets;
+  }
   if (match.sport === "football") {
     return buildFootballMarkets(match);
   }

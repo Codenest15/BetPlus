@@ -6,6 +6,8 @@ import {
   managerUpdateBetLeg,
   type LegOutcomeStatus,
 } from "@/lib/bet-store";
+import { managerUpdateLeg, useBackendApi } from "@/lib/backend-client";
+import { deferEffect } from "@/lib/defer-effect";
 import {
   buildLegMarketCatalog,
   findLegMarketEntry,
@@ -241,6 +243,7 @@ export function ManagerLegEditModal({
   onClose,
   onSaved,
 }: ManagerLegEditModalProps) {
+  const backendMode = useBackendApi();
   const match = useMemo(() => getMatchForLeg(selection), [selection]);
   const marketCatalog = useMemo(
     () => (match ? buildLegMarketCatalog(match) : []),
@@ -334,16 +337,16 @@ export function ManagerLegEditModal({
   }
 
   useEffect(() => {
-    if (!open) return;
-
-    const ft = initialFtScores(selection, ftScore ?? null);
-    setFtHome(ft.home);
-    setFtAway(ft.away);
-    setOdds(String(selection.odds));
-    setOutcomeStatus(detectOutcomeStatus(legWon, voidLeg));
-    setOutcomeLabel(selection.outcomeLabel ?? selection.selectionLabel);
-    setCustomPick(normalizeTicketScoreLabel(selection.selectionLabel));
-    setError("");
+    if (!open) return undefined;
+    return deferEffect(() => {
+      const ft = initialFtScores(selection, ftScore ?? null);
+      setFtHome(ft.home);
+      setFtAway(ft.away);
+      setOdds(String(selection.odds));
+      setOutcomeStatus(detectOutcomeStatus(legWon, voidLeg));
+      setOutcomeLabel(selection.outcomeLabel ?? selection.selectionLabel);
+      setCustomPick(normalizeTicketScoreLabel(selection.selectionLabel));
+      setError("");
 
     if (match) {
       const entry = findLegMarketEntry(match, selection);
@@ -357,6 +360,7 @@ export function ManagerLegEditModal({
       setMarketSearch("");
       setSelectedPickId(CUSTOM_PICK_ID);
     }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when modal opens
   }, [open, selection, legWon, voidLeg, ftScore, match]);
 
@@ -367,7 +371,7 @@ export function ManagerLegEditModal({
     }
   }
 
-  function handleUpdate() {
+  async function handleUpdate() {
     setError("");
     const oddsNum = Number.parseFloat(odds);
     const pick = normalizeTicketScoreLabel(customPick.trim());
@@ -407,34 +411,48 @@ export function ManagerLegEditModal({
         : pick;
 
     setSaving(true);
-    const updated = managerUpdateBetLeg(betId, {
-      legIndex,
-      marketId,
-      marketName: selectedEntry.name,
-      pick,
-      pickKey,
-      odds: oddsNum,
-      outcomeLabel: normalizeTicketScoreLabel(outcomeLabel.trim() || pick),
-      outcomeStatus,
-      ftHomeScore: ftH,
-      ftAwayScore: ftA,
-    });
-    setSaving(false);
-
-    if (!updated) {
-      setError("Could not update this leg.");
-      return;
+    try {
+      if (backendMode) {
+        await managerUpdateLeg(betId, legIndex, {
+          selection: pickKey,
+          selection_label: pick,
+          odds: oddsNum,
+          market_id: marketId,
+          market_name: selectedEntry.name,
+          outcome_label: normalizeTicketScoreLabel(outcomeLabel.trim() || pick),
+          outcome_status: outcomeStatus,
+          ft_home_score: ftH,
+          ft_away_score: ftA,
+        });
+      } else {
+        const updated = managerUpdateBetLeg(betId, {
+          legIndex,
+          marketId,
+          marketName: selectedEntry.name,
+          pick,
+          pickKey,
+          odds: oddsNum,
+          outcomeLabel: normalizeTicketScoreLabel(outcomeLabel.trim() || pick),
+          outcomeStatus,
+          ftHomeScore: ftH,
+          ftAwayScore: ftA,
+        });
+        if (!updated) {
+          setError("Could not update this leg.");
+          return;
+        }
+        logManagerAction(
+          "Update bet leg",
+          `${selection.homeTeam} vs ${selection.awayTeam} · ${selectedEntry.name} · ${pick} @ ${formatOdds(oddsNum)}${ftH != null && ftA != null ? ` · FT ${ftH}:${ftA}` : ""} · ${outcomeStatus}`,
+        );
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update this leg.");
+    } finally {
+      setSaving(false);
     }
-
-    const ftLabel =
-      ftH != null && ftA != null ? ` · FT ${ftH}:${ftA}` : "";
-
-    logManagerAction(
-      "Update bet leg",
-      `${selection.homeTeam} vs ${selection.awayTeam} · ${selectedEntry.name} · ${pick} @ ${formatOdds(oddsNum)}${ftLabel} · ${outcomeStatus}`,
-    );
-    onSaved();
-    onClose();
   }
 
   const showResults =

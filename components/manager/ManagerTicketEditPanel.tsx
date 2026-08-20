@@ -10,6 +10,7 @@ import { logManagerAction } from "@/lib/manager-store";
 import { recalcBetTotals } from "@/lib/bet-record";
 import { formatAmountPlain, ticketBonus, ticketId } from "@/lib/ticket-display";
 import { formatOdds } from "@/lib/utils";
+import { deferEffect } from "@/lib/defer-effect";
 import {
   managerPanelInputClass,
   managerPanelLabelClass,
@@ -113,11 +114,13 @@ export function ManagerTicketEditPanel({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setTicketIdValue(ticketId(bet));
-    setStakeValue(String(bet.stake));
-    setOddsValue(String(bet.totalOdds));
-    setTotalValue(String(bet.potentialWin));
-    setBonusValue(String(ticketBonus(bet)));
+    return deferEffect(() => {
+      setTicketIdValue(ticketId(bet));
+      setStakeValue(String(bet.stake));
+      setOddsValue(String(bet.totalOdds));
+      setTotalValue(String(bet.potentialWin));
+      setBonusValue(String(ticketBonus(bet)));
+    });
   }, [bet]);
 
   const previewStake =

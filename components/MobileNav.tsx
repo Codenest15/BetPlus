@@ -6,6 +6,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useBetSlip } from "@/lib/betslip-context";
 import { getBetsByUser } from "@/lib/bet-store";
+import { getMyBets, useBackendApi } from "@/lib/backend-client";
+import { backendBetToPlacedBet } from "@/lib/backend-mappers";
+import { deferEffect } from "@/lib/defer-effect";
 
 const TABS = [
   { id: "sports", href: "/", label: "Sports", match: ["/"], icon: SportsIcon },
@@ -60,9 +63,27 @@ function isTabActive(pathname: string, match: readonly string[]) {
 export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const backendMode = useBackendApi();
   const { user, openLogin } = useAuth();
   const { openTicketsTab } = useBetSlip();
   const [betsRevision, setBetsRevision] = useState(0);
+  const [remoteOpenCount, setRemoteOpenCount] = useState(0);
+
+  useEffect(() => {
+    return deferEffect(() => {
+      if (!user || !backendMode) {
+        setRemoteOpenCount(0);
+        return;
+      }
+      void getMyBets()
+        .then((bets) =>
+          setRemoteOpenCount(
+            bets.map(backendBetToPlacedBet).filter((b) => b.status === "open").length,
+          ),
+        )
+        .catch(() => setRemoteOpenCount(0));
+    });
+  }, [user, backendMode, betsRevision]);
 
   useEffect(() => {
     function bump() {
@@ -91,8 +112,9 @@ export function MobileNav() {
 
   const openTicketCount = useMemo(() => {
     if (!user) return 0;
+    if (backendMode) return remoteOpenCount;
     return getBetsByUser(user.id).filter((b) => b.status === "open").length;
-  }, [user?.id, betsRevision]);
+  }, [user?.id, backendMode, remoteOpenCount, betsRevision]);
 
   function handleOpenBets() {
     if (typeof window !== "undefined" && window.innerWidth >= 1024) {

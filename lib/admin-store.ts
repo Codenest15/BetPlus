@@ -1,3 +1,5 @@
+import { setAccessToken } from "./backend-client";
+
 export interface AdminAuditEntry {
   id: string;
   action: string;
@@ -30,7 +32,10 @@ export async function adminLogin(email: string, password: string): Promise<boole
       credentials: "include",
       body: JSON.stringify({ email, password }),
     });
-    return res.ok;
+    if (!res.ok) return false;
+    const data = (await res.json()) as { access_token?: string | null };
+    if (data.access_token) setAccessToken(data.access_token);
+    return true;
   } catch {
     return false;
   }
@@ -38,6 +43,7 @@ export async function adminLogin(email: string, password: string): Promise<boole
 
 export async function adminLogout(): Promise<void> {
   if (typeof window === "undefined") return;
+  setAccessToken(null);
   try {
     await fetch("/api/admin/logout", {
       method: "POST",
