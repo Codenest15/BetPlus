@@ -6,6 +6,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
 from app.core.db_url import normalize_database_url, reject_sqlite_if_hosted
+from app.db.alembic_preflight import prepare_database
 from app.db.base import Base
 from app.models import (  # noqa: F401
     AuditLog,
@@ -68,6 +69,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        prepare_database(connection)
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
