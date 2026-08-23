@@ -36,28 +36,66 @@ async function parseJson(resp: Response): Promise<unknown> {
   }
 }
 
+export function shouldSetJsonContentType(body: BodyInit | null | undefined): boolean {
+  if (body == null || body === "") return false;
+  if (typeof FormData !== "undefined" && body instanceof FormData) return false;
+  if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams) {
+    return false;
+  }
+  if (typeof Blob !== "undefined" && body instanceof Blob) return false;
+  return true;
+}
+
+export function formatApiErrorDetail(data: unknown, fallback: string): string {
+  if (typeof data !== "object" || !data || !("detail" in data)) return fallback;
+  const detail = (data as { detail: unknown }).detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          const loc =
+            "loc" in item && Array.isArray((item as { loc: unknown }).loc)
+              ? (item as { loc: unknown[] }).loc.filter((p) => p !== "body").join(".")
+              : "";
+          const msg = String((item as { msg: unknown }).msg);
+          return loc ? `${loc}: ${msg}` : msg;
+        }
+        return "";
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join("; ");
+  }
+  return fallback;
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit & { auth?: boolean } = {},
 ): Promise<T> {
-  const headers = new Headers(options.headers);
-  if (!headers.has("Content-Type") && options.body && !(options.body instanceof FormData)) {
+  const { auth = true, headers: initHeaders, ...fetchInit } = options;
+  const headers = new Headers(initHeaders);
+  if (!headers.has("Content-Type") && shouldSetJsonContentType(fetchInit.body)) {
     headers.set("Content-Type", "application/json");
   }
-  if (options.auth !== false) {
+  if (auth !== false) {
     const token = getToken();
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const resp = await fetch(path, { ...options, headers });
+  const resp = await fetch(path, { ...fetchInit, headers });
   const data = await parseJson(resp);
 
   if (!resp.ok) {
-    const detail =
-      typeof data === "object" && data && "detail" in data
-        ? String((data as { detail: unknown }).detail)
-        : resp.statusText;
-    throw new ApiError(detail || "Request failed", resp.status, data);
+    if (resp.status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+    throw new ApiError(
+      formatApiErrorDetail(data, resp.statusText || "Request failed"),
+      resp.status,
+      data,
+    );
   }
 
   return data as T;
@@ -82,6 +120,38 @@ export interface TokenResponse {
   token_type: string;
 }
 
+/** Payload FastAPI `UserRegister` accepts: name, email, phone, password, referral_code. */
+export function buildRegisterPayload(input: {
+  name: string;
+  email: string;
+  phone?: string;
+  password: string;
+  referralCode?: string;
+}): {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  referral_code?: string;
+} {
+  const payload: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    referral_code?: string;
+  } = {
+    name: input.name.trim(),
+    email: input.email.trim().toLowerCase(),
+    password: input.password,
+  };
+  const phone = input.phone?.trim();
+  if (phone) payload.phone = phone;
+  const referral = input.referralCode?.trim();
+  if (referral) payload.referral_code = referral;
+  return payload;
+}
+
 export async function registerUser(input: {
   name: string;
   email: string;
@@ -92,13 +162,7 @@ export async function registerUser(input: {
   return apiRequest<BackendUser>("/api/v1/auth/register", {
     method: "POST",
     auth: false,
-    body: JSON.stringify({
-      name: input.name,
-      email: input.email,
-      phone: input.phone,
-      password: input.password,
-      referral_code: input.referralCode,
-    }),
+    body: JSON.stringify(buildRegisterPayload(input)),
   });
 }
 

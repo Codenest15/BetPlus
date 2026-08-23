@@ -22,7 +22,12 @@ export function AuthModal() {
         aria-label="Close"
         onClick={closeAuthModal}
       />
-      <div className="relative w-full max-w-md overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:rounded-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
+        className="relative w-full max-w-md overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:rounded-2xl"
+      >
         <div className="h-1 bg-gradient-to-r from-brand-dark via-brand to-brand-accent" />
         <button
           type="button"
@@ -80,12 +85,14 @@ function LoginForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-6 pt-8">
       <div>
-        <h2 className="text-xl font-bold">Log In</h2>
+        <h2 id="auth-modal-title" className="text-xl font-bold">Log In</h2>
         <p className="mt-1 text-sm text-muted">Welcome back to BetPlus</p>
       </div>
 
       <Field
         label="Email or phone"
+        name="username"
+        autoComplete="username"
         value={identifier}
         onChange={setIdentifier}
         placeholder="you@email.com or 08012345678"
@@ -93,7 +100,9 @@ function LoginForm({
       />
       <Field
         label="Password"
+        name="password"
         type="password"
+        autoComplete="current-password"
         value={password}
         onChange={setPassword}
         placeholder="Your password"
@@ -155,7 +164,12 @@ function RegisterForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    const result = await onSubmit({ name, email, phone, password });
+    const result = await onSubmit({
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      password,
+    });
     setError(result ?? "");
     setSubmitting(false);
   }
@@ -163,7 +177,7 @@ function RegisterForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-6 pt-8">
       <div>
-        <h2 className="text-xl font-bold">Create Account</h2>
+        <h2 id="auth-modal-title" className="text-xl font-bold">Create Account</h2>
         <p className="mt-1 text-sm text-muted">Join BetPlus — get GH₵50 welcome balance</p>
         {referrerName && (
           <p className="mt-2 rounded-md bg-brand-light px-3 py-2 text-xs text-brand-dark">
@@ -173,10 +187,20 @@ function RegisterForm({
         )}
       </div>
 
-      <Field label="Full name" value={name} onChange={setName} placeholder="John Doe" required />
+      <Field
+        label="Full name"
+        name="name"
+        autoComplete="name"
+        value={name}
+        onChange={setName}
+        placeholder="John Doe"
+        required
+      />
       <Field
         label="Email"
+        name="email"
         type="email"
+        autoComplete="email"
         value={email}
         onChange={setEmail}
         placeholder="you@email.com"
@@ -184,7 +208,9 @@ function RegisterForm({
       />
       <Field
         label="Phone"
+        name="phone"
         type="tel"
+        autoComplete="tel"
         value={phone}
         onChange={setPhone}
         placeholder="08012345678"
@@ -192,10 +218,14 @@ function RegisterForm({
       />
       <Field
         label="Password"
+        name="password"
         type="password"
+        autoComplete="new-password"
         value={password}
         onChange={setPassword}
         placeholder="Min. 6 characters"
+        minLength={6}
+        maxLength={256}
         required
       />
 
@@ -203,6 +233,7 @@ function RegisterForm({
 
       <button
         type="submit"
+        data-testid="register-submit"
         disabled={submitting}
         className="w-full rounded-lg bg-brand-accent py-3 text-sm font-bold text-brand-dark hover:brightness-95 disabled:opacity-60"
       >
@@ -221,28 +252,40 @@ function RegisterForm({
 
 function Field({
   label,
+  name,
   value,
   onChange,
   type = "text",
   placeholder,
   required,
+  minLength,
+  maxLength,
+  autoComplete,
 }: {
   label: string;
+  name?: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
   placeholder?: string;
   required?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  autoComplete?: string;
 }) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
       <input
+        name={name}
         type={type}
+        autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         required={required}
+        minLength={minLength}
+        maxLength={maxLength}
         className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2.5 text-sm outline-none focus:border-brand"
       />
     </label>
