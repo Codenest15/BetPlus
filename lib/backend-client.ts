@@ -36,12 +36,46 @@ async function parseJson(resp: Response): Promise<unknown> {
   }
 }
 
+export function shouldSetJsonContentType(body: BodyInit | null | undefined): boolean {
+  if (body == null || body === "") return false;
+  if (typeof FormData !== "undefined" && body instanceof FormData) return false;
+  if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams) {
+    return false;
+  }
+  if (typeof Blob !== "undefined" && body instanceof Blob) return false;
+  return true;
+}
+
+export function formatApiErrorDetail(data: unknown, fallback: string): string {
+  if (typeof data !== "object" || !data || !("detail" in data)) return fallback;
+  const detail = (data as { detail: unknown }).detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          const loc =
+            "loc" in item && Array.isArray((item as { loc: unknown }).loc)
+              ? (item as { loc: unknown[] }).loc.filter((p) => p !== "body").join(".")
+              : "";
+          const msg = String((item as { msg: unknown }).msg);
+          return loc ? `${loc}: ${msg}` : msg;
+        }
+        return "";
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join("; ");
+  }
+  return fallback;
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit & { auth?: boolean } = {},
 ): Promise<T> {
   const headers = new Headers(options.headers);
-  if (!headers.has("Content-Type") && options.body && !(options.body instanceof FormData)) {
+  if (!headers.has("Content-Type") && shouldSetJsonContentType(options.body)) {
     headers.set("Content-Type", "application/json");
   }
   if (options.auth !== false) {
@@ -53,11 +87,14 @@ export async function apiRequest<T>(
   const data = await parseJson(resp);
 
   if (!resp.ok) {
-    const detail =
-      typeof data === "object" && data && "detail" in data
-        ? String((data as { detail: unknown }).detail)
-        : resp.statusText;
-    throw new ApiError(detail || "Request failed", resp.status, data);
+    if (resp.status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+    throw new ApiError(
+      formatApiErrorDetail(data, resp.statusText || "Request failed"),
+      resp.status,
+      data,
+    );
   }
 
   return data as T;

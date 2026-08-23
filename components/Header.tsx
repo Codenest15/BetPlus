@@ -75,6 +75,7 @@ export function Header() {
             <>
               <button
                 type="button"
+                data-testid="header-login"
                 onClick={openLogin}
                 className="text-sm font-medium text-white/90 hover:text-white"
               >
@@ -82,6 +83,7 @@ export function Header() {
               </button>
               <button
                 type="button"
+                data-testid="header-register"
                 onClick={openRegister}
                 className="rounded-full bg-brand-accent px-3.5 py-1.5 text-sm font-semibold text-brand-dark hover:brightness-95"
               >

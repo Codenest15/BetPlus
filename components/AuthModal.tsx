@@ -22,7 +22,12 @@ export function AuthModal() {
         aria-label="Close"
         onClick={closeAuthModal}
       />
-      <div className="relative w-full max-w-md overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:rounded-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
+        className="relative w-full max-w-md overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:rounded-2xl"
+      >
         <div className="h-1 bg-gradient-to-r from-brand-dark via-brand to-brand-accent" />
         <button
           type="button"
@@ -80,7 +85,7 @@ function LoginForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-6 pt-8">
       <div>
-        <h2 className="text-xl font-bold">Log In</h2>
+        <h2 id="auth-modal-title" className="text-xl font-bold">Log In</h2>
         <p className="mt-1 text-sm text-muted">Welcome back to BetPlus</p>
       </div>
 
@@ -163,7 +168,7 @@ function RegisterForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-6 pt-8">
       <div>
-        <h2 className="text-xl font-bold">Create Account</h2>
+        <h2 id="auth-modal-title" className="text-xl font-bold">Create Account</h2>
         <p className="mt-1 text-sm text-muted">Join BetPlus — get GH₵50 welcome balance</p>
         {referrerName && (
           <p className="mt-2 rounded-md bg-brand-light px-3 py-2 text-xs text-brand-dark">
@@ -196,6 +201,8 @@ function RegisterForm({
         value={password}
         onChange={setPassword}
         placeholder="Min. 6 characters"
+        minLength={6}
+        maxLength={256}
         required
       />
 
@@ -203,6 +210,7 @@ function RegisterForm({
 
       <button
         type="submit"
+        data-testid="register-submit"
         disabled={submitting}
         className="w-full rounded-lg bg-brand-accent py-3 text-sm font-bold text-brand-dark hover:brightness-95 disabled:opacity-60"
       >
@@ -226,6 +234,8 @@ function Field({
   type = "text",
   placeholder,
   required,
+  minLength,
+  maxLength,
 }: {
   label: string;
   value: string;
@@ -233,6 +243,8 @@ function Field({
   type?: string;
   placeholder?: string;
   required?: boolean;
+  minLength?: number;
+  maxLength?: number;
 }) {
   return (
     <label className="block">
@@ -243,6 +255,8 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         required={required}
+        minLength={minLength}
+        maxLength={maxLength}
         className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2.5 text-sm outline-none focus:border-brand"
       />
     </label>
