@@ -103,13 +103,14 @@ test.describe("Frontend ↔ backend contract", () => {
     const email = `ui-${Date.now()}@example.com`;
     const password = "secret1";
     const phone = `080${String(Date.now()).slice(-8)}`;
-    const seen: { url: string; method: string; contentType: string }[] = [];
+    const seen: { url: string; method: string; contentType: string; postData: string }[] = [];
     page.on("request", (req) => {
       if (!req.url().includes("/api/v1/auth/")) return;
       seen.push({
         url: req.url(),
         method: req.method(),
         contentType: req.headers()["content-type"] ?? "",
+        postData: req.postData() ?? "",
       });
     });
 
@@ -133,6 +134,12 @@ test.describe("Frontend ↔ backend contract", () => {
     const registerReq = seen.find((r) => r.url.includes("/api/v1/auth/register"));
     expect(registerReq?.method).toBe("POST");
     expect(registerReq?.contentType).toContain("application/json");
+    expect(JSON.parse(registerReq?.postData || "{}")).toEqual({
+      name: "UI User",
+      email,
+      phone,
+      password,
+    });
 
     await expect
       .poll(() => seen.some((r) => r.url.includes("/api/v1/auth/login")), { timeout: 45_000 })

@@ -74,16 +74,17 @@ export async function apiRequest<T>(
   path: string,
   options: RequestInit & { auth?: boolean } = {},
 ): Promise<T> {
-  const headers = new Headers(options.headers);
-  if (!headers.has("Content-Type") && shouldSetJsonContentType(options.body)) {
+  const { auth = true, headers: initHeaders, ...fetchInit } = options;
+  const headers = new Headers(initHeaders);
+  if (!headers.has("Content-Type") && shouldSetJsonContentType(fetchInit.body)) {
     headers.set("Content-Type", "application/json");
   }
-  if (options.auth !== false) {
+  if (auth !== false) {
     const token = getToken();
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const resp = await fetch(path, { ...options, headers });
+  const resp = await fetch(path, { ...fetchInit, headers });
   const data = await parseJson(resp);
 
   if (!resp.ok) {
@@ -119,6 +120,38 @@ export interface TokenResponse {
   token_type: string;
 }
 
+/** Payload FastAPI `UserRegister` accepts: name, email, phone, password, referral_code. */
+export function buildRegisterPayload(input: {
+  name: string;
+  email: string;
+  phone?: string;
+  password: string;
+  referralCode?: string;
+}): {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  referral_code?: string;
+} {
+  const payload: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    referral_code?: string;
+  } = {
+    name: input.name.trim(),
+    email: input.email.trim().toLowerCase(),
+    password: input.password,
+  };
+  const phone = input.phone?.trim();
+  if (phone) payload.phone = phone;
+  const referral = input.referralCode?.trim();
+  if (referral) payload.referral_code = referral;
+  return payload;
+}
+
 export async function registerUser(input: {
   name: string;
   email: string;
@@ -129,13 +162,7 @@ export async function registerUser(input: {
   return apiRequest<BackendUser>("/api/v1/auth/register", {
     method: "POST",
     auth: false,
-    body: JSON.stringify({
-      name: input.name,
-      email: input.email,
-      phone: input.phone,
-      password: input.password,
-      referral_code: input.referralCode,
-    }),
+    body: JSON.stringify(buildRegisterPayload(input)),
   });
 }
 

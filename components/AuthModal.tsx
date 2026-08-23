@@ -91,6 +91,8 @@ function LoginForm({
 
       <Field
         label="Email or phone"
+        name="username"
+        autoComplete="username"
         value={identifier}
         onChange={setIdentifier}
         placeholder="you@email.com or 08012345678"
@@ -98,7 +100,9 @@ function LoginForm({
       />
       <Field
         label="Password"
+        name="password"
         type="password"
+        autoComplete="current-password"
         value={password}
         onChange={setPassword}
         placeholder="Your password"
@@ -160,7 +164,12 @@ function RegisterForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    const result = await onSubmit({ name, email, phone, password });
+    const result = await onSubmit({
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      password,
+    });
     setError(result ?? "");
     setSubmitting(false);
   }
@@ -178,10 +187,20 @@ function RegisterForm({
         )}
       </div>
 
-      <Field label="Full name" value={name} onChange={setName} placeholder="John Doe" required />
+      <Field
+        label="Full name"
+        name="name"
+        autoComplete="name"
+        value={name}
+        onChange={setName}
+        placeholder="John Doe"
+        required
+      />
       <Field
         label="Email"
+        name="email"
         type="email"
+        autoComplete="email"
         value={email}
         onChange={setEmail}
         placeholder="you@email.com"
@@ -189,7 +208,9 @@ function RegisterForm({
       />
       <Field
         label="Phone"
+        name="phone"
         type="tel"
+        autoComplete="tel"
         value={phone}
         onChange={setPhone}
         placeholder="08012345678"
@@ -197,7 +218,9 @@ function RegisterForm({
       />
       <Field
         label="Password"
+        name="password"
         type="password"
+        autoComplete="new-password"
         value={password}
         onChange={setPassword}
         placeholder="Min. 6 characters"
@@ -229,6 +252,7 @@ function RegisterForm({
 
 function Field({
   label,
+  name,
   value,
   onChange,
   type = "text",
@@ -236,8 +260,10 @@ function Field({
   required,
   minLength,
   maxLength,
+  autoComplete,
 }: {
   label: string;
+  name?: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
@@ -245,12 +271,15 @@ function Field({
   required?: boolean;
   minLength?: number;
   maxLength?: number;
+  autoComplete?: string;
 }) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
       <input
+        name={name}
         type={type}
+        autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
