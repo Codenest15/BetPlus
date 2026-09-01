@@ -533,7 +533,7 @@ export default function WalletPage() {
                 </label>
               </div>
               <p className="text-[10px] leading-snug text-muted">
-                Demo only — connect a PCI-compliant gateway (e.g. Paystack, Stripe) for
+                Demo only — connect a PCI-compliant gateway (e.g. Moolre, Stripe) for
                 live card processing.
               </p>
             </div>
