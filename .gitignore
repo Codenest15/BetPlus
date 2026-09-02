@@ -32,8 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-!.env.example
-
+.env.example
+Procfile
 # python / backend
 __pycache__/
 *.py[cod]
@@ -52,3 +52,6 @@ backend/*.db
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.env.example
+DEPLOY.md
+Procfile
