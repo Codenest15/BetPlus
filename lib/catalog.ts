@@ -94,14 +94,48 @@ async function resolveBackendLeagueId(
   return league?.id ?? null;
 }
 
+async function confirmBackendLeague(
+  leagueId: number,
+  sportSlug: string,
+): Promise<boolean> {
+  const sports = await fetchCatalogJson<BackendCatalogSport[]>(
+    "/api/v1/catalog/sports",
+  );
+  const sport = sports.find((entry) => entry.slug === sportSlug);
+  if (!sport) return false;
+
+  const leagues = await fetchCatalogJson<BackendCatalogLeague[]>(
+    `/api/v1/catalog/leagues?sport_id=${sport.id}`,
+  );
+  return leagues.some((entry) => entry.id === leagueId);
+}
+
 export async function fetchCatalogGames(options?: {
   leagueId?: number;
+  leagueSlug?: string;
   sport?: string;
   live?: boolean;
 }): Promise<Match[]> {
   const origin = catalogOrigin();
   const qs = new URLSearchParams();
-  if (options?.leagueId !== undefined) qs.set("league_id", String(options.leagueId));
+  let leagueId: number | null | undefined = options?.leagueId;
+  if (options?.leagueSlug && options.sport) {
+    leagueId = await resolveBackendLeagueId(
+      options.leagueSlug,
+      options.sport as Sport,
+    );
+    if (leagueId === null) return [];
+  }
+  if (leagueId !== undefined) {
+    if (
+      !options?.sport ||
+      (options.leagueSlug === undefined &&
+        !(await confirmBackendLeague(leagueId, options.sport)))
+    ) {
+      return [];
+    }
+    qs.set("league_id", String(leagueId));
+  }
   if (options?.sport) qs.set("sport", options.sport);
   if (options?.live) qs.set("live", "true");
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
@@ -163,9 +197,7 @@ export async function getLeagueMatchesForPage(
   sport: Sport,
 ): Promise<Match[]> {
   if (isBackendEnabled()) {
-    const backendLeagueId = await resolveBackendLeagueId(leagueId, sport);
-    if (backendLeagueId === null) return [];
-    return fetchCatalogGames({ leagueId: backendLeagueId, sport });
+    return fetchCatalogGames({ leagueSlug: leagueId, sport });
   }
   return getMatchesForLeague(leagueId);
 }
