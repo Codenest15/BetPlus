@@ -25,6 +25,19 @@ export interface BackendCatalogGame {
   markets?: BettingMarket[];
 }
 
+interface BackendCatalogSport {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+interface BackendCatalogLeague {
+  id: number;
+  sport_id: number;
+  name: string;
+  slug: string;
+}
+
 function catalogOrigin(): string {
   if (typeof window === "undefined") {
     return process.env.BACKEND_URL ?? "http://localhost:8000";
@@ -56,12 +69,39 @@ export function backendGameToMatch(g: BackendCatalogGame): Match {
   };
 }
 
+async function fetchCatalogJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${catalogOrigin()}${path}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load match catalog");
+  return (await res.json()) as T;
+}
+
+async function resolveBackendLeagueId(
+  leagueSlug: string,
+  sportSlug: Sport,
+): Promise<number | null> {
+  const sports = await fetchCatalogJson<BackendCatalogSport[]>(
+    "/api/v1/catalog/sports",
+  );
+  const sport = sports.find((entry) => entry.slug === sportSlug);
+  if (!sport) return null;
+
+  const leagues = await fetchCatalogJson<BackendCatalogLeague[]>(
+    `/api/v1/catalog/leagues?sport_id=${sport.id}`,
+  );
+  const league = leagues.find(
+    (entry) => entry.slug === leagueSlug || entry.name === leagueSlug,
+  );
+  return league?.id ?? null;
+}
+
 export async function fetchCatalogGames(options?: {
+  leagueId?: number;
   sport?: string;
   live?: boolean;
 }): Promise<Match[]> {
   const origin = catalogOrigin();
   const qs = new URLSearchParams();
+  if (options?.leagueId !== undefined) qs.set("league_id", String(options.leagueId));
   if (options?.sport) qs.set("sport", options.sport);
   if (options?.live) qs.set("live", "true");
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
@@ -119,14 +159,13 @@ export async function getMatchForPage(id: string): Promise<Match | null> {
 
 export async function getLeagueMatchesForPage(
   leagueId: string,
-  leagueName: string,
+  _leagueName: string,
   sport: Sport,
 ): Promise<Match[]> {
   if (isBackendEnabled()) {
-    const matches = await fetchCatalogGames({ sport });
-    return matches.filter(
-      (m) => m.league.toLowerCase() === leagueName.toLowerCase(),
-    );
+    const backendLeagueId = await resolveBackendLeagueId(leagueId, sport);
+    if (backendLeagueId === null) return [];
+    return fetchCatalogGames({ leagueId: backendLeagueId, sport });
   }
   return getMatchesForLeague(leagueId);
 }
