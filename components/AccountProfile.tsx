@@ -15,23 +15,14 @@ interface AccountProfileProps {
 }
 
 const QUICK_LINKS: { label: string; href: string; icon: IconId }[] = [
+  { label: "Open Bets", href: "/my-bets", icon: "bet-history" },
   { label: "Bet History", href: "/bet-history", icon: "bet-history" },
   { label: "Wallet", href: "/wallet", icon: "wallet" },
-  { label: "Promotions", href: "/promotions", icon: "promotions" },
 ];
 
-const MENU_ITEMS: {
-  label: string;
-  href: string;
-  icon: IconId;
-  status?: string;
-}[] = [
-  { label: "Jackpot", href: "/jackpot", icon: "jackpot" },
-  { label: "Live Scores", href: "/scores", icon: "live-scores" },
-  { label: "Virtual Sports", href: "/virtual", icon: "virtual-sports" },
-  { label: "Booking Code", href: "/verify", icon: "booking-code" },
+const ACCOUNT_LINKS: { label: string; href: string; icon: IconId; status?: string }[] = [
+  { label: "Promotions", href: "/promotions", icon: "promotions" },
   { label: "Customer Service", href: "/support", status: "Online 24/7", icon: "support" },
-  { label: "How to play", href: "/support", icon: "support" },
 ];
 
 export function AccountProfile({
@@ -141,8 +132,12 @@ export function AccountProfile({
       </div>
 
       <div className="rounded-t-2xl bg-surface text-foreground">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-foreground">My account</h2>
+          <p className="text-[11px] text-muted">Bets, wallet, and profile settings</p>
+        </div>
         <ul className="divide-y divide-border">
-          {MENU_ITEMS.map((item) => (
+          {ACCOUNT_LINKS.map((item) => (
             <li key={item.label}>
               <Link
                 href={item.href}

@@ -8,9 +8,17 @@ interface OddsButtonProps {
   match: Match;
   selection: OddsSelection;
   label: string;
+  compact?: boolean;
+  onLiveRow?: boolean;
 }
 
-export function OddsButton({ match, selection, label }: OddsButtonProps) {
+export function OddsButton({
+  match,
+  selection,
+  label,
+  compact = false,
+  onLiveRow = false,
+}: OddsButtonProps) {
   const { addSelection, isSelected } = useBetSlip();
   const odds = match.odds[selection];
   const selected = isSelected(match.id, selection);
@@ -22,7 +30,9 @@ export function OddsButton({ match, selection, label }: OddsButtonProps) {
       label={label}
       odds={odds}
       selected={selected}
-      className="min-h-[44px] py-1.5"
+      compact={compact}
+      onLiveRow={onLiveRow}
+      className={compact ? "min-h-[2.75rem] min-w-0 flex-1 py-1" : "min-h-[44px] py-1.5"}
       onClick={() => addSelection(match, selection)}
     />
   );

@@ -8,6 +8,8 @@ interface OddsCellProps {
   selected: boolean;
   onClick: () => void;
   className?: string;
+  compact?: boolean;
+  onLiveRow?: boolean;
 }
 
 export function OddsCell({
@@ -16,27 +18,37 @@ export function OddsCell({
   selected,
   onClick,
   className = "",
+  compact = false,
+  onLiveRow = false,
 }: OddsCellProps) {
+  const idleClass = onLiveRow
+    ? "border-white/20 bg-white/10 hover:border-white/30 hover:bg-white/15"
+    : "border-brand-soft/80 bg-brand-light/40 hover:border-brand/25 hover:bg-brand-light/60";
+
+  const idleOddsClass = onLiveRow ? "text-white" : "text-brand-dark";
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center rounded-md px-2 py-2.5 transition-all active:scale-[0.98] ${
+      className={`flex min-w-0 flex-1 flex-col items-center justify-center rounded-sm px-1 transition-all active:scale-[0.98] ${
         selected
-          ? "border border-brand bg-brand text-white shadow-sm"
-          : "border border-brand-soft bg-gradient-to-b from-surface to-brand-light/70 hover:border-brand/25 hover:from-brand-light/30 hover:to-brand-light"
+          ? "border border-brand-accent bg-brand-accent text-brand-dark shadow-sm"
+          : idleClass
       } ${className}`}
     >
+      {!compact && (
+        <span
+          className={`max-w-full truncate text-[11px] font-medium leading-tight ${
+            selected ? "text-brand-dark/90" : onLiveRow ? "text-white/70" : "text-muted"
+          }`}
+        >
+          {label}
+        </span>
+      )}
       <span
-        className={`max-w-full truncate text-[11px] font-medium leading-tight ${
-          selected ? "text-white/90" : "text-muted"
-        }`}
-      >
-        {label}
-      </span>
-      <span
-        className={`mt-1 text-sm font-bold tabular-nums leading-none ${
-          selected ? "text-white" : "text-brand-dark"
+        className={`${compact ? "text-xs" : "mt-1 text-sm"} font-bold tabular-nums leading-none ${
+          selected ? "text-brand-dark" : idleOddsClass
         }`}
       >
         {formatOdds(odds)}

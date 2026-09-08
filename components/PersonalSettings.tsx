@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AccountBackLink } from "@/components/AccountBackLink";
 import { useAuth } from "@/lib/auth-context";
 import { formatMoney } from "@/lib/utils";
 
@@ -71,13 +72,16 @@ export function PersonalSettings({
 
   return (
     <div className="space-y-5">
-      <button
-        type="button"
-        onClick={onBack}
-        className="flex items-center gap-1 text-sm font-medium text-brand hover:underline"
-      >
-        ← Back to Account
-      </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1 text-sm font-medium text-brand hover:underline"
+        >
+          ← Back to Account
+        </button>
+        <AccountBackLink />
+      </div>
 
       <div>
         <h2 className="text-xl font-bold">Personal Settings</h2>

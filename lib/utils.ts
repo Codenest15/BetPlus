@@ -2,6 +2,27 @@ export function formatOdds(value: number) {
   return value.toFixed(2);
 }
 
+/** Clock time when the match starts (e.g. 19:45). */
+export function formatMatchStartTime(iso: string) {
+  const date = new Date(iso);
+  return date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+/** Unique id label for match cards (BetPlus catalog id or Sportradar id). */
+export function formatMatchDisplayId(match: {
+  id: string;
+  catalogId?: number;
+}) {
+  if (match.catalogId != null) return String(match.catalogId);
+  const sportradar = match.id.match(/sr:match:(\d+)/i);
+  if (sportradar) return sportradar[1];
+  return match.id;
+}
+
 export function formatKickoff(iso: string) {
   const date = new Date(iso);
   const now = new Date();

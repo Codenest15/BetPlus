@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Prevent Next from using C:\Users\DELL\package-lock.json as the workspace root.
+  turbopack: {
+    root: projectRoot,
+  },
 };
 
 export default nextConfig;

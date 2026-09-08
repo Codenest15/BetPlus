@@ -4,13 +4,19 @@ export type OddsSelection = "home" | "draw" | "away";
 
 export interface Match {
   id: string;
+  /** BetPlus catalog numeric id — shown as "ID …" on match cards. */
+  catalogId?: number;
   sport: Sport;
   league: string;
+  /** BetPlus catalog league id — used for per-league fetches. */
+  leagueId?: number;
   homeTeam: string;
   awayTeam: string;
   homeAbbr: string;
   awayAbbr: string;
   kickoff: string;
+  /** Raw catalog status (e.g. live, finished). */
+  status?: string;
   isLive?: boolean;
   liveMinute?: number;
   homeScore?: number;
@@ -23,6 +29,8 @@ export interface Match {
     draw: number;
     away: number;
   };
+  /** Populated when loaded from BetPlus catalog API. */
+  catalogMarkets?: BettingMarket[];
 }
 
 export interface BetSelection {
@@ -45,6 +53,7 @@ export interface BetSelection {
 }
 
 export type MarketCategory =
+  | "favourites"
   | "all"
   | "main"
   | "goals"

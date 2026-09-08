@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CountryFlag } from "@/components/CountryFlag";
+import { getCatalogApiConfig } from "@/lib/catalog-config.server";
+import {
+  countriesFromCatalogLeagues,
+  featuredCatalogLeagues,
+  fetchCatalogLeaguesForSport,
+  type CatalogCountryEntry,
+} from "@/lib/leagues-catalog.server";
 import {
   getCountriesForSport,
   getTopLeaguesForSport,
@@ -19,8 +26,22 @@ export default async function SportLeaguesPage({ params }: SportLeaguesPageProps
   if (!isValidSport(sportParam)) notFound();
 
   const sport = sportParam as Sport;
-  const topLeagues = getTopLeaguesForSport(sport);
-  const countries = getCountriesForSport(sport);
+  const config = getCatalogApiConfig();
+  const catalogLeagues =
+    config.enabled && sport === "football"
+      ? await fetchCatalogLeaguesForSport(sport)
+      : [];
+
+  const useCatalog = catalogLeagues.length > 0;
+
+  const topLeagues = useCatalog
+    ? featuredCatalogLeagues(catalogLeagues)
+    : getTopLeaguesForSport(sport);
+
+  const countries: CatalogCountryEntry[] | ReturnType<typeof getCountriesForSport> =
+    useCatalog
+      ? countriesFromCatalogLeagues(catalogLeagues)
+      : getCountriesForSport(sport);
 
   return (
     <div className="space-y-5">
@@ -32,7 +53,11 @@ export default async function SportLeaguesPage({ params }: SportLeaguesPageProps
           ← All sports
         </Link>
         <h1 className="page-title mt-1">{sportLabel(sport)}</h1>
-        <p className="mt-0.5 text-xs text-muted">Top leagues and countries</p>
+        <p className="mt-0.5 text-xs text-muted">
+          {useCatalog
+            ? `${countries.length} countries · ${catalogLeagues.length} leagues`
+            : "Top leagues and countries"}
+        </p>
       </div>
 
       <section>
@@ -45,9 +70,11 @@ export default async function SportLeaguesPage({ params }: SportLeaguesPageProps
                 className="card-hover flex items-center justify-between px-3 py-2.5 transition-colors"
               >
                 <span className="text-sm font-medium">{league.name}</span>
-                <span className="text-[11px] text-muted">
-                  {countMatchesForLeague(league.id)} games
-                </span>
+                {!useCatalog && (
+                  <span className="text-[11px] text-muted">
+                    {countMatchesForLeague(String(league.id))} games
+                  </span>
+                )}
               </Link>
             </li>
           ))}
@@ -65,6 +92,11 @@ export default async function SportLeaguesPage({ params }: SportLeaguesPageProps
               >
                 <CountryFlag code={country.flagCode} />
                 <span className="flex-1 text-sm font-medium">{country.name}</span>
+                {useCatalog && (
+                  <span className="text-[11px] text-muted">
+                    {(country as CatalogCountryEntry).leagueCount}
+                  </span>
+                )}
                 <span className="text-xs text-muted/60">›</span>
               </Link>
             </li>

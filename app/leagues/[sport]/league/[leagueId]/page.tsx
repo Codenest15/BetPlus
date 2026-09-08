@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MatchRow } from "@/components/MatchRow";
+import { getCatalogApiConfig } from "@/lib/catalog-config.server";
+import { countryDisplayName } from "@/lib/catalog-country";
+import {
+  catalogLeagueById,
+  fetchCatalogLeaguesForSport,
+  fetchCatalogMatchesForLeague,
+} from "@/lib/leagues-catalog.server";
 import {
   getCountryById,
   getLeagueById,
@@ -18,6 +25,52 @@ export default async function LeagueMatchesPage({
 }: LeagueMatchesPageProps) {
   const { sport: sportParam, leagueId } = await params;
   if (!isValidSport(sportParam)) notFound();
+
+  const config = getCatalogApiConfig();
+  const numericLeagueId = Number(leagueId);
+
+  if (
+    config.enabled &&
+    sportParam === "football" &&
+    Number.isFinite(numericLeagueId)
+  ) {
+    const catalogLeagues = await fetchCatalogLeaguesForSport("football");
+    const league = catalogLeagueById(catalogLeagues, numericLeagueId);
+    if (!league) notFound();
+
+    const matches = await fetchCatalogMatchesForLeague(numericLeagueId);
+    const countryName = countryDisplayName(league.countrySlug);
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <Link
+            href={`/leagues/${sportParam}/country/${league.countrySlug}`}
+            className="text-[11px] font-medium text-brand hover:underline"
+          >
+            ← {countryName}
+          </Link>
+          <h1 className="page-title mt-1">{league.name}</h1>
+          <p className="text-xs text-muted">
+            {matches.length}{" "}
+            {matches.length === 1 ? "match" : "matches"} from BetPlus
+          </p>
+        </div>
+
+        {matches.length === 0 ? (
+          <p className="py-8 text-center text-xs text-muted">
+            No matches right now.
+          </p>
+        ) : (
+          <div className="home-feed -mx-3 match-list sm:mx-0">
+            {matches.map((match) => (
+              <MatchRow key={match.id} match={match} showLeague={false} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const league = getLeagueById(leagueId);
   if (!league || league.sport !== sportParam) notFound();
@@ -47,11 +100,11 @@ export default async function LeagueMatchesPage({
       {matches.length === 0 ? (
         <p className="py-8 text-center text-xs text-muted">No matches right now.</p>
       ) : (
-        <section className="league-block">
-          {matches.map((match, index) => (
-            <MatchRow key={match.id} match={match} showDivider={index > 0} />
+        <div className="home-feed -mx-3 match-list sm:mx-0">
+          {matches.map((match) => (
+            <MatchRow key={match.id} match={match} showLeague={false} />
           ))}
-        </section>
+        </div>
       )}
     </div>
   );

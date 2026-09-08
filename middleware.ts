@@ -29,6 +29,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname.startsWith("/api/catalog")) {
+    return NextResponse.next();
+  }
+
   // Public app: admin URLs are hidden — send users home (no login hint).
   if (!adminOnly && isAdminPath(pathname)) {
     return NextResponse.redirect(new URL("/", request.url));

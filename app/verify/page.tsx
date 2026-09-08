@@ -148,40 +148,25 @@ export default function VerifyPage() {
         </button>
       </div>
 
-      <div className="card bg-surface-elevated/40 p-3 text-xs text-muted">
+      <div className="space-y-1 text-center text-xs text-muted">
         <p className="font-medium text-foreground">
           {mode === "ticket" ? "What gets verified" : "Load slip works with"}
         </p>
-        <ul className="mt-1.5 space-y-0.5">
-          {mode === "ticket" ? (
-            <>
-              <li>· Stake and total odds</li>
-              <li>· Won, lost, or open status</li>
-              <li>· Potential win and amount returned</li>
-              <li>· Unique code on each settled slip</li>
-            </>
-          ) : (
-            <>
-              <li>· Shared betslips</li>
-              <li>· Placed bet booking codes (BP…)</li>
-              <li>· Game codes (BETPLUS, AVIATOR)</li>
-            </>
-          )}
-        </ul>
+        {mode === "ticket" ? (
+          <>
+            <p>Stake and total odds</p>
+            <p>Won, lost, or open status</p>
+            <p>Potential win and amount returned</p>
+            <p>Unique code on each settled slip</p>
+          </>
+        ) : (
+          <>
+            <p>Shared betslips</p>
+            <p>Placed bet booking codes (BP…)</p>
+            <p>Game codes (BETPLUS, AVIATOR)</p>
+          </>
+        )}
       </div>
-
-      {mode === "ticket" && (
-        <p className="text-center text-[10px] text-muted">
-          Try demo:{" "}
-          <button
-            type="button"
-            className="font-mono text-brand hover:underline"
-            onClick={() => setCode("GHE714ZASK10BF6JK")}
-          >
-            GHE714ZASK10BF6JK
-          </button>
-        </p>
-      )}
 
       <p className="text-center text-[11px] text-muted">
         <Link href="/support" className="text-brand hover:underline">

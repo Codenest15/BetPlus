@@ -2,39 +2,100 @@ import type { BettingMarket, MarketCategory, MarketOutcome, Match } from "./type
 import { buildSportyBetCatalog } from "./football-market-catalog";
 import { mkMarket, overUnder, r, yesNo } from "./market-factories";
 
+const FOOTBALL_CATEGORY_TABS: { id: MarketCategory; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "main", label: "Main" },
+  { id: "goals", label: "Goals" },
+  { id: "corners", label: "Corners" },
+  { id: "half", label: "Half" },
+  { id: "players", label: "Players" },
+  { id: "teams", label: "Teams" },
+  { id: "match", label: "Match" },
+  { id: "bookings", label: "Bookings" },
+  { id: "combo", label: "Combo" },
+  { id: "minutes", label: "Minutes" },
+];
+
+const CATEGORY_LABELS: Record<MarketCategory, string> = {
+  favourites: "Favourites",
+  all: "All",
+  main: "Main",
+  goals: "Goals",
+  half: "Half",
+  bookings: "Bookings",
+  corners: "Corners",
+  combo: "Combo",
+  players: "Players",
+  teams: "Teams",
+  minutes: "Minutes",
+  match: "Match",
+  "to-qualify": "To Qualify",
+};
+
+/** Overlay BetPlus API market odds onto the local catalog (keeps all SportyBet tabs). */
+function overlayCatalogMarkets(
+  base: BettingMarket[],
+  match: Match,
+): BettingMarket[] {
+  const catalog = match.catalogMarkets;
+  if (!catalog?.length) return base;
+
+  const apiById = new Map(catalog.map((market) => [market.id, market]));
+  const usedApiIds = new Set<string>();
+
+  const merged = base.map((market) => {
+    const api = apiById.get(market.id);
+    if (api) {
+      usedApiIds.add(api.id);
+      return {
+        ...market,
+        name: api.name,
+        category: api.category,
+        outcomes: api.outcomes,
+      };
+    }
+    return market;
+  });
+
+  for (const api of catalog) {
+    if (!usedApiIds.has(api.id)) {
+      merged.push(api);
+    }
+  }
+
+  return merged;
+}
+
 export function getMarketCategoriesForMatch(match: Match) {
-  if (match.sport !== "football") {
-    return [
-      { id: "all" as const, label: "All" },
-      { id: "main" as const, label: "Main" },
-      { id: "match" as const, label: "Match" },
-    ];
+  if (match.sport === "football") {
+    const cats = [...FOOTBALL_CATEGORY_TABS];
+    if (match.isQualifier) {
+      cats.push({ id: "to-qualify", label: "To Qualify" });
+    }
+    return cats;
   }
 
-  const cats: { id: MarketCategory; label: string }[] = [
-    { id: "all", label: "All" },
-    { id: "main", label: "Main" },
-    { id: "goals", label: "Goals" },
-    { id: "half", label: "Half" },
-    { id: "bookings", label: "Bookings" },
-    { id: "corners", label: "Corners" },
-    { id: "combo", label: "Combo" },
-    { id: "players", label: "Players" },
-    { id: "teams", label: "Teams" },
-    { id: "minutes", label: "Minutes" },
-    { id: "match", label: "Match" },
+  if (match.catalogMarkets && match.catalogMarkets.length > 0) {
+    const ids = new Set<MarketCategory>(["all"]);
+    for (const market of match.catalogMarkets) {
+      ids.add(market.category);
+    }
+    return [...ids].map((id) => ({ id, label: CATEGORY_LABELS[id] ?? id }));
+  }
+
+  return [
+    { id: "all" as const, label: "All" },
+    { id: "main" as const, label: "Main" },
+    { id: "match" as const, label: "Match" },
   ];
-
-  if (match.isQualifier) {
-    cats.push({ id: "to-qualify", label: "To Qualify" });
-  }
-
-  return cats;
 }
 
 export function getMarketsForMatch(match: Match): BettingMarket[] {
   if (match.sport === "football") {
-    return buildFootballMarkets(match);
+    return overlayCatalogMarkets(buildFootballMarkets(match), match);
+  }
+  if (match.catalogMarkets && match.catalogMarkets.length > 0) {
+    return match.catalogMarkets;
   }
   return buildOtherSportMarkets(match);
 }
@@ -219,7 +280,8 @@ export function filterMarketsByCategory(
   markets: BettingMarket[],
   category: MarketCategory,
 ) {
-  if (category === "all") return markets;
+  if (category === "all" || category === "favourites") return markets;
+
   return markets.filter(
     (m) =>
       m.category === category ||
