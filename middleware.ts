@@ -29,7 +29,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (pathname.startsWith("/api/catalog")) {
+  if (pathname.startsWith("/api/catalog") || pathname.startsWith("/api/team-crest")) {
     return NextResponse.next();
   }
 

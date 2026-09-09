@@ -1,5 +1,9 @@
 import type { BettingMarket, MarketCategory, MarketOutcome, Match } from "./types";
 import { buildSportyBetCatalog } from "./football-market-catalog";
+import {
+  applyLiveMarketState,
+  type LiveMarketStateOptions,
+} from "./live-market-suspension";
 import { mkMarket, overUnder, r, yesNo } from "./market-factories";
 
 const FOOTBALL_CATEGORY_TABS: { id: MarketCategory; label: string }[] = [
@@ -90,14 +94,19 @@ export function getMarketCategoriesForMatch(match: Match) {
   ];
 }
 
-export function getMarketsForMatch(match: Match): BettingMarket[] {
+export function getMarketsForMatch(
+  match: Match,
+  liveOptions?: LiveMarketStateOptions,
+): BettingMarket[] {
+  let markets: BettingMarket[];
   if (match.sport === "football") {
-    return overlayCatalogMarkets(buildFootballMarkets(match), match);
+    markets = overlayCatalogMarkets(buildFootballMarkets(match), match);
+  } else if (match.catalogMarkets && match.catalogMarkets.length > 0) {
+    markets = match.catalogMarkets;
+  } else {
+    markets = buildOtherSportMarkets(match);
   }
-  if (match.catalogMarkets && match.catalogMarkets.length > 0) {
-    return match.catalogMarkets;
-  }
-  return buildOtherSportMarkets(match);
+  return applyLiveMarketState(match, markets, liveOptions);
 }
 
 function buildFootballMarkets(match: Match): BettingMarket[] {

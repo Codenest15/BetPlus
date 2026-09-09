@@ -14,6 +14,9 @@ export interface Match {
   awayTeam: string;
   homeAbbr: string;
   awayAbbr: string;
+  /** Optional crest image from catalog API. */
+  homeLogoUrl?: string | null;
+  awayLogoUrl?: string | null;
   kickoff: string;
   /** Raw catalog status (e.g. live, finished). */
   status?: string;
@@ -72,6 +75,8 @@ export interface MarketOutcome {
   label: string;
   odds: number;
   team?: "home" | "away";
+  /** Live — brief lock while odds refresh after a goal/incident (not for settled lines). */
+  suspended?: boolean;
 }
 
 export interface BettingMarket {

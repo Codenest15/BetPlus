@@ -125,6 +125,7 @@ export const PlayerMarketBlock = forwardRef<HTMLElement, PlayerMarketBlockProps>
                     label={outcome.label}
                     odds={outcome.odds}
                     onLiveRow={live}
+                    suspended={outcome.suspended}
                   />
                 ))}
               </div>

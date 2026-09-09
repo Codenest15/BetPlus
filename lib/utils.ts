@@ -12,6 +12,30 @@ export function formatMatchStartTime(iso: string) {
   });
 }
 
+/** Match detail hero — date, weekday, and kickoff time. */
+export function formatMatchDetailSchedule(iso: string) {
+  const date = new Date(iso);
+  return {
+    shortDate: date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+    }),
+    weekday: date.toLocaleDateString("en-GB", { weekday: "long" }),
+    time: formatMatchStartTime(iso),
+  };
+}
+
+const SPORT_LABELS: Record<string, string> = {
+  football: "Football",
+  basketball: "Basketball",
+  baseball: "Baseball",
+  hockey: "Hockey",
+};
+
+export function sportLabel(sport: string) {
+  return SPORT_LABELS[sport] ?? sport.charAt(0).toUpperCase() + sport.slice(1);
+}
+
 /** Unique id label for match cards (BetPlus catalog id or Sportradar id). */
 export function formatMatchDisplayId(match: {
   id: string;

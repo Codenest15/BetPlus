@@ -7,9 +7,15 @@ import {
   getTodayFromCatalog,
 } from "@/lib/catalog-filters";
 import { useCatalog } from "@/lib/catalog-context";
+import {
+  featuredVisibleForSport,
+  leaguesVisibleForSport,
+  mergeHomeSportEvents,
+} from "@/lib/home-events";
 import { useMatchSearch } from "@/lib/match-search-context";
 import { filterMatchesBySearch } from "@/lib/match-search";
 import type { Sport } from "@/lib/types";
+import { FeaturedMatches } from "./FeaturedMatches";
 import { LeagueTabs } from "./LeagueTabs";
 import { MatchRow } from "./MatchRow";
 import { SectionTabs, type SectionTab } from "./SectionTabs";
@@ -38,11 +44,20 @@ export function SportsHome() {
   const [leagueId, setLeagueId] = useState<number | null>(null);
   const [section, setSection] = useState<SectionTab>("all");
 
+  const homeEvents = useMemo(() => mergeHomeSportEvents(events), [events]);
+
   useEffect(() => {
     if (leagueId !== null) {
       void loadLeagueEvents(leagueId);
     }
   }, [leagueId, loadLeagueEvents]);
+
+  const handleSportChange = (next: Sport | "all") => {
+    setSport(next);
+    if (!leaguesVisibleForSport(next)) {
+      setLeagueId(null);
+    }
+  };
 
   const viewFilter = useMemo(
     () => ({
@@ -54,17 +69,25 @@ export function SportsHome() {
 
   const matches = useMemo(() => {
     if (searching) {
-      const pool = applySportLeagueFilter(events, sport, leagueId);
+      const pool = applySportLeagueFilter(homeEvents, sport, leagueId);
       return filterMatchesBySearch(pool, searchQuery).sort((a, b) => {
         if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
         return new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
       });
     }
 
-    if (section === "live") return getLiveFromCatalog(events, viewFilter);
-    if (section === "soon") return getTodayFromCatalog(events, viewFilter);
-    return getAllFromCatalog(events, viewFilter);
-  }, [section, viewFilter, events, sport, leagueId, searchQuery, searching]);
+    if (section === "live") return getLiveFromCatalog(homeEvents, viewFilter);
+    if (section === "soon") return getTodayFromCatalog(homeEvents, viewFilter);
+    return getAllFromCatalog(homeEvents, viewFilter);
+  }, [
+    section,
+    viewFilter,
+    homeEvents,
+    sport,
+    leagueId,
+    searchQuery,
+    searching,
+  ]);
 
   const sortedMatches = useMemo(() => {
     return [...matches].sort((a, b) => {
@@ -76,17 +99,22 @@ export function SportsHome() {
   }, [matches]);
 
   const leagueLoading = leagueId !== null && loadingLeagueId === leagueId;
+  const showLeagues = leaguesVisibleForSport(sport) && leagues.length > 0;
+  const showFeatured = featuredVisibleForSport(sport, searching);
 
   return (
     <div className="-mx-3 space-y-0 sm:mx-0">
+      {showFeatured && (
+        <FeaturedMatches events={homeEvents} leagues={leagues} />
+      )}
       <div className="home-feed">
         <div className="home-toolbar py-1">
           <SectionTabs active={section} onChange={setSection} />
           <div className="home-toolbar-divider" aria-hidden />
           <div className="min-w-0 py-2">
-            <SportTabs active={sport} onChange={setSport} />
+            <SportTabs active={sport} onChange={handleSportChange} />
           </div>
-          {leagues.length > 0 && (
+          {showLeagues && (
             <>
               <div className="home-toolbar-divider" aria-hidden />
               <div className="min-w-0 py-2">

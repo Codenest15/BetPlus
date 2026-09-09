@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import {
   filterMarketsByCategory,
   getMarketCategoriesForMatch,
@@ -11,11 +10,8 @@ import { useFavouriteMarkets } from "@/lib/market-favourites";
 import { isMatchLive } from "@/lib/match-status";
 import { getMatchPlayers } from "@/lib/match-players";
 import type { BettingMarket, MarketCategory, Match } from "@/lib/types";
-import {
-  formatKickoff,
-  formatMatchDisplayId,
-  formatMatchStartTime,
-} from "@/lib/utils";
+import { useLiveOddsFreeze } from "@/lib/use-live-odds-freeze";
+import { MatchDetailHero } from "./MatchDetailHero";
 import { MarketCategoryTabs } from "./MarketCategoryTabs";
 import {
   filterMarketsByQuery,
@@ -31,8 +27,12 @@ interface MatchMarketsProps {
 
 export function MatchMarkets({ match }: MatchMarketsProps) {
   const live = isMatchLive(match);
+  const oddsFrozen = useLiveOddsFreeze(match);
   const categories = getMarketCategoriesForMatch(match);
-  const allMarkets = useMemo(() => getMarketsForMatch(match), [match]);
+  const allMarkets = useMemo(
+    () => getMarketsForMatch(match, { oddsFrozen: live && oddsFrozen }),
+    [match, live, oddsFrozen],
+  );
   const players = useMemo(() => getMatchPlayers(match), [match]);
   const [category, setCategory] = useState<MarketCategory>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,85 +106,7 @@ export function MatchMarkets({ match }: MatchMarketsProps) {
           : "-mx-3 md:-mx-0 md:overflow-hidden md:rounded-lg md:border md:border-border md:shadow-sm"
       }
     >
-      <div
-        className={
-          live
-            ? "match-live-surface px-3 pb-3 pt-2"
-            : "border-b border-border bg-surface px-3 pb-3 pt-2 text-foreground"
-        }
-      >
-        <Link
-          href={live ? "/live" : "/"}
-          className={`mb-2 inline-flex items-center gap-1 text-xs hover:underline ${
-            live ? "text-white/70 hover:text-white" : "text-muted hover:text-brand"
-          }`}
-        >
-          ← Back
-        </Link>
-        <p className={`text-[11px] ${live ? "text-white/55" : "text-muted"}`}>
-          ID {formatMatchDisplayId(match)}
-          {!live && <> · {formatMatchStartTime(match.kickoff)}</>}
-        </p>
-        <p className={`text-[11px] ${live ? "text-white/55" : "text-muted"}`}>
-          {match.league}
-        </p>
-        {match.isQualifier && (
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span
-              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                live
-                  ? "bg-white/15 text-white"
-                  : "bg-brand/10 text-brand"
-              }`}
-            >
-              Qualifier
-            </span>
-            {match.legInfo && (
-              <span className={`text-[10px] ${live ? "text-white/55" : "text-muted"}`}>
-                {match.legInfo}
-              </span>
-            )}
-            {match.aggregateScore && (
-              <span className={`text-[10px] ${live ? "text-white/55" : "text-muted"}`}>
-                Agg {match.aggregateScore}
-              </span>
-            )}
-          </div>
-        )}
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p
-              className={`truncate text-sm font-semibold ${
-                live ? "text-white" : "text-foreground"
-              }`}
-            >
-              {match.homeTeam}
-            </p>
-            <p
-              className={`truncate text-sm font-semibold ${
-                live ? "text-white" : "text-foreground"
-              }`}
-            >
-              {match.awayTeam}
-            </p>
-          </div>
-          <div className="shrink-0 text-right">
-            {live ? (
-              <>
-                <p className="text-lg font-bold tabular-nums text-white">
-                  {match.homeScore} - {match.awayScore}
-                </p>
-                <p className="inline-flex items-center justify-end gap-1 text-[11px] font-semibold text-live">
-                  <span className="h-1.5 w-1.5 rounded-full bg-live" aria-hidden />
-                  Live {match.liveMinute}&apos;
-                </p>
-              </>
-            ) : (
-              <p className="text-xs text-muted">{formatKickoff(match.kickoff)}</p>
-            )}
-          </div>
-        </div>
-      </div>
+      <MatchDetailHero match={match} />
 
       <MarketCategoryTabs
         categories={categories}
@@ -288,6 +210,7 @@ export function MatchMarkets({ match }: MatchMarketsProps) {
                         label={outcome.label}
                         odds={outcome.odds}
                         onLiveRow={live}
+                        suspended={outcome.suspended}
                       />
                     ))}
                   </div>

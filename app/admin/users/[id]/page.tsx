@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
-import { getUserById, setUserBalance, setUserManagerRole } from "@/lib/auth-store";
+import { getUserById, grantFreeBetBalance, setUserBalance, setUserManagerRole } from "@/lib/auth-store";
 import { getBetsByUser, getTransactionsByUser } from "@/lib/bet-store";
 import { logAdminAction } from "@/lib/admin-store";
 import type { PlacedBet } from "@/lib/bet-types";
@@ -17,6 +17,7 @@ export default function AdminUserDetailPage() {
   const [user, setUser] = useState<User | null>(null);
   const [bets, setBets] = useState<PlacedBet[]>([]);
   const [balanceInput, setBalanceInput] = useState("");
+  const [freeBetInput, setFreeBetInput] = useState("");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -48,6 +49,29 @@ export default function AdminUserDetailPage() {
     );
     setUser(result.user);
     setMessage("Balance updated");
+  }
+
+  function handleGrantFreeBet(e: React.FormEvent) {
+    e.preventDefault();
+    const amount = Number.parseFloat(freeBetInput);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setMessage("Enter a valid free bet amount");
+      return;
+    }
+
+    const result = grantFreeBetBalance(userId, amount);
+    if ("error" in result) {
+      setMessage(result.error);
+      return;
+    }
+
+    logAdminAction(
+      "Grant free bet",
+      `${result.user.email} → +${formatMoney(amount)} (total ${formatMoney(result.user.freeBetBalance ?? 0)})`,
+    );
+    setUser(result.user);
+    setFreeBetInput("");
+    setMessage("Free bet reward granted");
   }
 
   function handleToggleManager() {
@@ -125,6 +149,34 @@ export default function AdminUserDetailPage() {
             className="rounded-md bg-brand px-3 py-2 text-xs font-medium text-white"
           >
             Save balance
+          </button>
+        </form>
+
+        <form onSubmit={handleGrantFreeBet} className="card flex flex-wrap items-end gap-3 p-3">
+          <div>
+            <p className="text-[11px] text-muted">
+              Free bet balance: {formatMoney(user.freeBetBalance ?? 0)}
+            </p>
+            <label className="mt-2 block">
+              <span className="mb-1 block text-[11px] text-muted">
+                Grant free bet reward (consistency bonus)
+              </span>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={freeBetInput}
+                onChange={(e) => setFreeBetInput(e.target.value)}
+                placeholder="e.g. 10"
+                className="w-40 rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-brand"
+              />
+            </label>
+          </div>
+          <button
+            type="submit"
+            className="rounded-md bg-brand-accent px-3 py-2 text-xs font-semibold text-brand-dark"
+          >
+            Add free bet
           </button>
         </form>
 

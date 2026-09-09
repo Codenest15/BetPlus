@@ -4,10 +4,14 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { useCatalog } from "./catalog-context";
+import { getLiveMatchOdds } from "./live-odds";
+import { resolveSelectionLiveOdds } from "./live-odds-slip";
 import type { BetSelection, Match, OddsSelection } from "./types";
 
 export type BetSlipType = "single" | "multiple" | "system";
@@ -37,6 +41,8 @@ interface BetSlipContextValue {
   setFlexiEnabled: (on: boolean) => void;
   oneCutEnabled: boolean;
   setOneCutEnabled: (on: boolean) => void;
+  useFreeBet: boolean;
+  setUseFreeBet: (on: boolean) => void;
   addSelection: (match: Match, selection: OddsSelection) => void;
   addMarketSelection: (match: Match, input: AddMarketInput) => void;
   removeSelection: (id: string) => void;
@@ -75,6 +81,7 @@ function r(n: number) {
 }
 
 export function BetSlipProvider({ children }: { children: ReactNode }) {
+  const { events } = useCatalog();
   const [selections, setSelections] = useState<BetSelection[]>([]);
   const [stake, setStake] = useState(1);
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
@@ -83,6 +90,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
   const [slipTab, setSlipTab] = useState<BetSlipTab>("betslip");
   const [flexiEnabled, setFlexiEnabled] = useState(false);
   const [oneCutEnabled, setOneCutEnabled] = useState(false);
+  const [useFreeBet, setUseFreeBet] = useState(false);
   const [betslipOpen, setBetslipOpen] = useState(false);
 
   const activeSelections = useMemo(
@@ -109,7 +117,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
 
   const addSelection = useCallback(
     (match: Match, selection: OddsSelection) => {
-      const odds = match.odds[selection];
+      const odds = getLiveMatchOdds(match)[selection];
       if (!odds) return;
 
       replaceMatchSelection(match.id, {
@@ -246,6 +254,23 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
     setBetslipOpen(true);
   }, []);
 
+  useEffect(() => {
+    if (selections.length === 0 || events.length === 0) return;
+
+    setSelections((prev) => {
+      let changed = false;
+      const next = prev.map((sel) => {
+        const match = events.find((e) => e.id === sel.matchId);
+        if (!match) return sel;
+        const updated = resolveSelectionLiveOdds(match, sel);
+        if (updated == null || updated === sel.odds) return sel;
+        changed = true;
+        return { ...sel, odds: updated };
+      });
+      return changed ? next : prev;
+    });
+  }, [events, selections.length]);
+
   const value = useMemo(
     () => ({
       selections,
@@ -262,6 +287,8 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       setFlexiEnabled,
       oneCutEnabled,
       setOneCutEnabled,
+      useFreeBet,
+      setUseFreeBet,
       addSelection,
       addMarketSelection,
       removeSelection,
@@ -290,6 +317,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       slipTab,
       flexiEnabled,
       oneCutEnabled,
+      useFreeBet,
       addSelection,
       addMarketSelection,
       removeSelection,

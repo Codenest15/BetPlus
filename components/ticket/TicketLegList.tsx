@@ -11,10 +11,27 @@ import { getBetById } from "@/lib/bet-store";
 import { formatOdds } from "@/lib/utils";
 import { ManagerLegEditModal } from "@/components/manager/ManagerLegEditModal";
 
-function StatusIcon({ won, lost }: { won: boolean; lost: boolean }) {
+const TIMELINE_X = "1.625rem"; /* px-3 + half of 28px icon */
+
+function legConnectorClass(won: boolean, lost: boolean, finished: boolean) {
+  if (won) return "bg-accent/75";
+  if (lost) return "bg-live/75";
+  if (finished) return "bg-brand/45";
+  return "bg-brand-soft";
+}
+
+function StatusIcon({
+  won,
+  lost,
+  finished,
+}: {
+  won: boolean;
+  lost: boolean;
+  finished: boolean;
+}) {
   if (won) {
     return (
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-white">
+      <span className="relative z-[2] flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-white ring-2 ring-white">
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
@@ -23,19 +40,57 @@ function StatusIcon({ won, lost }: { won: boolean; lost: boolean }) {
   }
   if (lost) {
     return (
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-live text-white">
+      <span className="relative z-[2] flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-live text-white ring-2 ring-white">
         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
           <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </span>
     );
   }
+  if (finished) {
+    return (
+      <span className="relative z-[2] flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-dark text-[9px] font-extrabold tracking-wide text-white ring-2 ring-white">
+        FT
+      </span>
+    );
+  }
   return (
-    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-white">
+    <span className="relative z-[2] flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-white ring-2 ring-white">
       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-        <path strokeLinecap="round" d="M5 12h14" />
+        <circle cx="12" cy="12" r="9" />
+        <path strokeLinecap="round" d="M12 7v5l3 2" />
       </svg>
     </span>
+  );
+}
+
+function LegFtResultBadge({
+  ftScore,
+  won,
+  lost,
+  voidLeg,
+}: {
+  ftScore: string;
+  won: boolean;
+  lost: boolean;
+  voidLeg?: boolean;
+}) {
+  const tone = won
+    ? "border-accent/35 bg-accent/10 text-accent"
+    : lost
+      ? "border-live/35 bg-live-soft text-live"
+      : "border-brand-soft bg-brand-light text-brand-dark";
+
+  const label = voidLeg ? "Void" : won ? "Won" : lost ? "Lost" : "Full Time";
+
+  return (
+    <div
+      className={`mt-2 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 ${tone}`}
+    >
+      <span className="text-[11px] font-bold tabular-nums">FT {ftScore}</span>
+      <span className="h-3 w-px bg-current opacity-25" aria-hidden />
+      <span className="text-[11px] font-semibold">{label}</span>
+    </div>
   );
 }
 
@@ -62,11 +117,31 @@ function TrophyWatermark() {
   );
 }
 
+function LostWatermark() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-y-0 right-0 w-[42%] overflow-hidden"
+      aria-hidden
+    >
+      <svg
+        className="absolute -right-1 top-1/2 h-[88%] max-h-[100px] w-auto -translate-y-1/2 text-live opacity-[0.08]"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+      >
+        <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </div>
+  );
+}
+
 interface TicketLegItemProps {
   leg: TicketLegDisplay;
   legIndex: number;
   betId: string;
   canEdit: boolean;
+  isLast: boolean;
   onBetUpdate?: (bet: PlacedBet) => void;
 }
 
@@ -75,18 +150,21 @@ export function TicketLegItem({
   legIndex,
   betId,
   canEdit,
+  isLast,
   onBetUpdate,
 }: TicketLegItemProps) {
   const [editOpen, setEditOpen] = useState(false);
   const won = leg.legWon === true;
   const lost = leg.legWon === false;
   const pending = leg.legWon === null;
+  const finished = !!leg.ftScore || leg.legWon !== null;
   const pickLabel = normalizeTicketScoreLabel(leg.selection.selectionLabel);
   const pickOdds = formatOdds(leg.selection.odds);
   const outcomeLabel = normalizeTicketScoreLabel(
     leg.selection.outcomeLabel ?? leg.selection.selectionLabel,
   );
   const marketName = leg.selection.marketName ?? "1X2";
+  const connector = legConnectorClass(won, lost, finished);
 
   function handleSaved() {
     const updated = getBetById(betId);
@@ -96,15 +174,50 @@ export function TicketLegItem({
   return (
     <>
       <li
-        className={`relative overflow-hidden border-b border-brand-soft last:border-b-0 ${
-          won ? "bg-accent-soft" : lost ? "bg-red-50" : "bg-brand-light"
+        className={`relative overflow-hidden ${
+          isLast ? "" : "border-b border-brand-soft"
+        } ${
+          won
+            ? "border-l-[3px] border-l-accent bg-accent-soft"
+            : lost
+              ? "border-l-[3px] border-l-live bg-live-soft/40"
+              : "border-l-[3px] border-l-brand/30 bg-brand-light"
         }`}
       >
+        {/* Spine segment — runs from icon centre down through card border to next icon */}
+        {!isLast && (
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute z-[1] w-0.5 ${connector}`}
+            style={{
+              left: TIMELINE_X,
+              top: "calc(0.75rem + 14px)",
+              bottom: "-1px",
+              transform: "translateX(-50%)",
+            }}
+          />
+        )}
+
+        {/* Last leg — line ends at bottom edge of card */}
+        {isLast && (
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute z-[1] w-0.5 ${connector}`}
+            style={{
+              left: TIMELINE_X,
+              top: "calc(0.75rem + 14px)",
+              bottom: 0,
+              transform: "translateX(-50%)",
+            }}
+          />
+        )}
+
         {won && <TrophyWatermark />}
+        {lost && finished && <LostWatermark />}
 
         <div className="relative flex gap-3 px-3 py-3">
-          <div className="pt-0.5">
-            <StatusIcon won={won} lost={lost} />
+          <div className="flex w-7 shrink-0 flex-col items-center">
+            <StatusIcon won={won} lost={lost} finished={finished} />
           </div>
 
           <div className="relative z-[1] min-w-0 flex-1 pr-2">
@@ -114,17 +227,18 @@ export function TicketLegItem({
               {leg.selection.homeTeam} - {leg.selection.awayTeam}
             </p>
 
-            {leg.ftScore && (
-              <p className="mt-1.5 text-xs text-foreground">
-                FT Score: <span className="font-bold">{leg.ftScore}</span>
-              </p>
-            )}
-
-            {pending && !leg.ftScore && (
+            {leg.ftScore ? (
+              <LegFtResultBadge
+                ftScore={leg.ftScore}
+                won={won}
+                lost={lost}
+                voidLeg={leg.voidLeg}
+              />
+            ) : pending ? (
               <p className="mt-1 text-xs font-medium text-amber-600">
                 {leg.voidLeg ? "Void leg" : "Awaiting result"}
               </p>
-            )}
+            ) : null}
 
             <button
               type="button"
@@ -195,7 +309,7 @@ export function TicketLegList({ bet, legs, onBetUpdate }: TicketLegListProps) {
   const canEdit = canManage && !!onBetUpdate;
 
   return (
-    <ul>
+    <ul className="relative overflow-hidden bg-white">
       {legs.map((leg, index) => (
         <TicketLegItem
           key={`${leg.selection.id}-${index}`}
@@ -203,6 +317,7 @@ export function TicketLegList({ bet, legs, onBetUpdate }: TicketLegListProps) {
           legIndex={index}
           betId={bet.id}
           canEdit={canEdit}
+          isLast={index === legs.length - 1}
           onBetUpdate={onBetUpdate}
         />
       ))}

@@ -4,6 +4,8 @@ export interface User {
   email: string;
   phone: string;
   balance: number;
+  /** Admin-granted free bet credits (consistency rewards). */
+  freeBetBalance?: number;
   createdAt: string;
   /** Granted by admin — shows Manager tab and match control tools */
   isManager?: boolean;

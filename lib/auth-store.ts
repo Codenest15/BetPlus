@@ -135,6 +135,45 @@ export function setUserBalance(
   return { user: toPublicUser(users[index]) };
 }
 
+/** Admin rewards — add free-bet credits for consistent users. */
+export function grantFreeBetBalance(
+  userId: string,
+  amount: number,
+): { user: User } | { error: string } {
+  if (amount <= 0) return { error: "Amount must be greater than zero." };
+
+  const users = readUsers();
+  const index = users.findIndex((u) => u.id === userId);
+  if (index === -1) return { error: "User not found." };
+
+  const next = Math.round(((users[index].freeBetBalance ?? 0) + amount) * 100) / 100;
+  users[index].freeBetBalance = next;
+  writeUsers(users);
+  emitUserUpdated(userId);
+
+  return { user: toPublicUser(users[index]) };
+}
+
+export function useFreeBetBalance(
+  userId: string,
+  amount: number,
+): { user: User } | { error: string } {
+  if (amount <= 0) return { error: "Invalid amount." };
+
+  const users = readUsers();
+  const index = users.findIndex((u) => u.id === userId);
+  if (index === -1) return { error: "User not found." };
+
+  const available = users[index].freeBetBalance ?? 0;
+  if (amount > available) return { error: "Insufficient free bet balance." };
+
+  users[index].freeBetBalance = Math.round((available - amount) * 100) / 100;
+  writeUsers(users);
+  emitUserUpdated(userId);
+
+  return { user: toPublicUser(users[index]) };
+}
+
 /** Admin grants or revokes manager tools on a user account. */
 export function setUserManagerRole(
   userId: string,

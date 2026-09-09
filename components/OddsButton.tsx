@@ -1,6 +1,7 @@
 "use client";
 
 import { useBetSlip } from "@/lib/betslip-context";
+import { getLiveMatchOdds } from "@/lib/live-odds";
 import type { Match, OddsSelection } from "@/lib/types";
 import { OddsCell } from "./OddsCell";
 
@@ -20,7 +21,7 @@ export function OddsButton({
   onLiveRow = false,
 }: OddsButtonProps) {
   const { addSelection, isSelected } = useBetSlip();
-  const odds = match.odds[selection];
+  const odds = getLiveMatchOdds(match)[selection];
   const selected = isSelected(match.id, selection);
 
   if (!odds) return null;

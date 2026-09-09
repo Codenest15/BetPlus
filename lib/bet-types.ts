@@ -58,8 +58,12 @@ export interface PlacedBet {
   originalSelections?: BetSelectionRecord;
   stake: number;
   totalOdds: number;
+  /** Odds at placement — unchanged when void legs are removed from settlement. */
+  originalTotalOdds?: number;
   potentialWin: number;
   bonus?: number;
+  /** Stake was paid from admin free-bet reward, not wallet balance. */
+  usedFreeBet?: boolean;
   status: BetStatus;
   placedAt: string;
   supportClaims?: BetSupportClaim[];

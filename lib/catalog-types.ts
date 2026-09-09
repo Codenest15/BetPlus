@@ -48,6 +48,8 @@ export type RemoteCatalogGame = {
   away?: string;
   home_abbr?: string | null;
   away_abbr?: string | null;
+  home_logo?: string | null;
+  away_logo?: string | null;
   starts_at?: string | null;
   status?: string;
   is_live?: boolean;

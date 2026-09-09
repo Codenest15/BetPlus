@@ -16,7 +16,7 @@ import { canAdminEditLeg, getBetEditStatus } from "./bet-edit-rules";
 import { getMatchFtScore } from "./match-results";
 import { normalizeTicketScoreLabel } from "./ticket-display";
 import { computeAutoSettlement, reconcileBetRecord } from "./bet-settlement";
-import { getUserById, updateUserBalance } from "./auth-store";
+import { getUserById, updateUserBalance, useFreeBetBalance } from "./auth-store";
 import type { User } from "./user-types";
 import {
   recordBetLost,
@@ -94,6 +94,7 @@ export function placeBet(input: {
   verifyCode?: string;
   ticketId?: string;
   flexCut?: number;
+  usedFreeBet?: boolean;
 }): PlacedBet {
   const bonus =
     input.selections.length >= 3
@@ -110,8 +111,10 @@ export function placeBet(input: {
     originalSelections: cloneSelections(input.selections),
     stake: input.stake,
     totalOdds: input.totalOdds,
+    originalTotalOdds: input.totalOdds,
     potentialWin: input.potentialWin,
     bonus,
+    usedFreeBet: input.usedFreeBet === true ? true : undefined,
     flexCut:
       input.flexCut != null && input.flexCut > 0 ? input.flexCut : undefined,
     status: "open",
@@ -149,10 +152,23 @@ export function placeBetForUser(input: {
   verifyCode?: string;
   ticketId?: string;
   flexCut?: number;
+  usedFreeBet?: boolean;
 }): { bet: PlacedBet; user: User } | { error: string } {
   const user = getUserById(input.userId);
   if (!user) return { error: "User not found." };
   if (input.stake < 1) return { error: "Minimum stake is GH₵1." };
+
+  if (input.usedFreeBet) {
+    if (input.stake > (user.freeBetBalance ?? 0)) {
+      return { error: "Insufficient free bet balance." };
+    }
+    const freeResult = useFreeBetBalance(input.userId, input.stake);
+    if ("error" in freeResult) return { error: freeResult.error };
+
+    const bet = placeBet({ ...input, usedFreeBet: true });
+    return { bet, user: freeResult.user };
+  }
+
   if (input.stake > user.balance) return { error: "Insufficient balance." };
 
   const balanceResult = updateUserBalance(input.userId, -input.stake);

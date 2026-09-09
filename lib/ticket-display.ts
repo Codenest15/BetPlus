@@ -41,9 +41,9 @@ function legKickoffLabel(bet: PlacedBet, index: number) {
 
 export function betTypeLabel(bet: PlacedBet) {
   if (bet.flexCut && bet.flexCut > 0) {
-    return bet.selections.length > 1 ? `Flex ${bet.flexCut}` : "Singles";
+    return bet.selections.length > 1 ? `Flex ${bet.flexCut}` : "Single";
   }
-  return bet.selections.length > 1 ? "Multiple" : "Singles";
+  return bet.selections.length > 1 ? "Multiple" : "Single";
 }
 
 export function statusHeadline(status: BetStatus) {
@@ -59,10 +59,53 @@ export function totalReturn(bet: PlacedBet) {
   return 0;
 }
 
+/** Any leg or whole bet marked void — triggers “After Void” odds row. */
+export function betHasVoidLeg(bet: PlacedBet): boolean {
+  if (bet.status === "void") return true;
+  return (bet.legResults ?? []).some((r) => r.void === true);
+}
+
+export function originalTicketOdds(bet: PlacedBet): number {
+  return bet.originalTotalOdds ?? bet.totalOdds;
+}
+
+/** Recalculated accumulator odds excluding void legs. */
+export function totalOddsAfterVoid(bet: PlacedBet): number {
+  const voidLegs = new Set(
+    (bet.legResults ?? []).filter((r) => r.void).map((r) => r.legIndex),
+  );
+
+  if (bet.status === "void" && voidLegs.size === 0) {
+    return 1;
+  }
+
+  const active = bet.selections.filter((_, i) => !voidLegs.has(i));
+  if (active.length === 0) return 1;
+
+  return (
+    Math.round(active.reduce((acc, s) => acc * s.odds, 1) * 100) / 100
+  );
+}
+
+export function betUsedFreeBet(bet: PlacedBet): boolean {
+  return bet.usedFreeBet === true;
+}
+
+/** Amount shown in open-bets / bet-history list cards. */
+export function listDisplayReturn(bet: PlacedBet) {
+  if (bet.status === "open") return bet.potentialWin;
+  return totalReturn(bet);
+}
+
+export function listReturnLabel(bet: PlacedBet) {
+  return bet.status === "open" ? "Pot. Win" : "Total Return";
+}
+
 export function ticketBonus(bet: PlacedBet) {
   if (bet.bonus != null && bet.bonus > 0) return bet.bonus;
-  if (bet.selections.length >= 3 && bet.status === "won") {
-    return Math.round(bet.stake * bet.totalOdds * 0.04 * 100) / 100;
+  if (bet.selections.length >= 3) {
+    const odds = originalTicketOdds(bet);
+    return Math.round(bet.stake * odds * 0.04 * 100) / 100;
   }
   return 0;
 }

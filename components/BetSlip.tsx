@@ -9,10 +9,10 @@ import {
 } from "@/lib/bet-store";
 import { formatMoney, formatOdds } from "@/lib/utils";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { BookingCodeDisplay } from "./BookingCodeDisplay";
+import { BetSuccessfulModal, type BetSuccessInfo } from "./BetSuccessfulModal";
 import { BetTicketsPanel } from "./BetTicketsPanel";
+import { BookingCodeDisplay } from "./BookingCodeDisplay";
 
 interface BetSlipProps {
   variant?: "sidebar" | "sheet";
@@ -20,7 +20,6 @@ interface BetSlipProps {
 }
 
 export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
-  const router = useRouter();
   const slipRef = useRef<HTMLElement>(null);
   const { user, openLogin, refreshUser } = useAuth();
   const {
@@ -41,19 +40,25 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
     maxBonus,
     potentialWin,
     selectionCount,
+    useFreeBet,
+    setUseFreeBet,
   } = useBetSlip();
 
   const [error, setError] = useState("");
   const [placing, setPlacing] = useState(false);
   const [bookedCode, setBookedCode] = useState<string | null>(null);
+  const [successBet, setSuccessBet] = useState<BetSuccessInfo | null>(null);
   const [insureDismissed, setInsureDismissed] = useState(false);
 
   const isSheet = variant === "sheet";
   const ticketsTab = slipTab === "bet-history" ? "bet-history" : "open-bets";
   const showingTickets = slipTab === "open-bets" || slipTab === "bet-history";
 
+  const freeBetAvailable = user?.freeBetBalance ?? 0;
+  const payingWithFreeBet = useFreeBet && freeBetAvailable >= totalStake && totalStake > 0;
+
   const balanceShortfall =
-    user && betMode === "real" && totalStake > user.balance
+    user && betMode === "real" && !payingWithFreeBet && totalStake > user.balance
       ? totalStake - user.balance
       : 0;
 
@@ -62,7 +67,7 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
     activeSelections.length > 0 &&
     stake >= 1 &&
     !!user &&
-    totalStake <= user.balance;
+    (payingWithFreeBet || totalStake <= user.balance);
 
   function handlePlaceBet() {
     setError("");
@@ -82,8 +87,12 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
       setError("Minimum stake is GH₵1");
       return;
     }
-    if (totalStake > user.balance) {
+    if (!payingWithFreeBet && totalStake > user.balance) {
       setError("Insufficient balance");
+      return;
+    }
+    if (payingWithFreeBet && totalStake > freeBetAvailable) {
+      setError("Insufficient free bet balance");
       return;
     }
 
@@ -94,6 +103,7 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
       stake: totalStake,
       totalOdds,
       potentialWin,
+      usedFreeBet: payingWithFreeBet,
     });
     if ("error" in result) {
       setError(result.error);
@@ -105,9 +115,19 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
     const { bet } = result;
 
     clearSlip();
+    setUseFreeBet(false);
     setPlacing(false);
-    if (onClose) onClose();
-    router.push(`/bet/${bet.bookingCode}`);
+    setSuccessBet({
+      bookingCode: bet.bookingCode,
+      stake: bet.stake,
+      potentialWin: bet.potentialWin,
+    });
+    window.dispatchEvent(new CustomEvent("betplus:bets-updated"));
+  }
+
+  function handleViewOpenBets() {
+    setSuccessBet(null);
+    setSlipTab("open-bets");
   }
 
   function handleBookBet() {
@@ -126,6 +146,12 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
   }
 
   return (
+    <>
+      <BetSuccessfulModal
+        bet={successBet}
+        onClose={() => setSuccessBet(null)}
+        onViewOpenBets={handleViewOpenBets}
+      />
     <aside
       ref={slipRef}
       id="betslip"
@@ -345,16 +371,38 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
 
               {/* Summary rows */}
               <div className="border-t border-brand-soft/80 text-xs">
+                {user && betMode === "real" && freeBetAvailable > 0 && totalStake > 0 && (
+                  <label className="flex cursor-pointer items-center justify-between border-b border-brand-soft/60 bg-brand-light/30 px-2.5 py-2">
+                    <span className="text-muted">
+                      Use free bet reward ({formatMoney(freeBetAvailable)})
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={useFreeBet}
+                      onChange={(e) => setUseFreeBet(e.target.checked)}
+                      disabled={freeBetAvailable < totalStake}
+                      className="h-4 w-4 accent-brand"
+                    />
+                  </label>
+                )}
                 {user && betMode === "real" && (
                   <div className="flex items-center justify-between border-b border-brand-soft/60 bg-surface px-2.5 py-1.5">
                     <span className="text-muted">Balance</span>
                     <span className="font-semibold tabular-nums text-brand-dark">
                       {formatMoney(user.balance)}
-                      {totalStake > 0 && totalStake <= user.balance && (
+                      {totalStake > 0 && !payingWithFreeBet && totalStake <= user.balance && (
                         <span className="ml-1.5 font-normal text-muted">
                           → {formatMoney(user.balance - totalStake)} after stake
                         </span>
                       )}
+                    </span>
+                  </div>
+                )}
+                {payingWithFreeBet && (
+                  <div className="flex items-center justify-between border-b border-brand-soft/60 bg-accent-soft/40 px-2.5 py-1.5">
+                    <span className="text-muted">Free Bet Gift</span>
+                    <span className="font-semibold tabular-nums text-accent">
+                      -{formatMoney(totalStake)}
                     </span>
                   </div>
                 )}
@@ -366,7 +414,7 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
                 </div>
                 {maxBonus > 0 && (
                   <div className="flex items-center justify-between border-b border-brand-soft/60 bg-brand-light/40 px-2.5 py-1.5">
-                    <span className="text-muted">Max Bonus</span>
+                    <span className="text-muted">Total Bonus</span>
                     <span className="font-semibold tabular-nums text-brand-dark">
                       {formatMoney(maxBonus)}
                     </span>
@@ -423,7 +471,7 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
                 </button>
               </div>
               <p className="py-1 text-center text-[10px] text-muted">
-                Amount to pay: {totalStake.toFixed(2)}
+                Amount to pay: {payingWithFreeBet ? "0.00" : totalStake.toFixed(2)}
               </p>
 
               <div className="flex items-center justify-end border-t border-border/40 px-2 py-1">
@@ -440,5 +488,6 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
         </>
       )}
     </aside>
+    </>
   );
 }

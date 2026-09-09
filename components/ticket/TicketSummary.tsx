@@ -4,12 +4,17 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import type { PlacedBet } from "@/lib/bet-types";
 import {
+  betHasVoidLeg,
   betTypeLabel,
+  betUsedFreeBet,
   formatAmountPlain,
+  listDisplayReturn,
+  listReturnLabel,
+  originalTicketOdds,
   statusHeadline,
   ticketBonus,
   ticketId,
-  totalReturn,
+  totalOddsAfterVoid,
 } from "@/lib/ticket-display";
 import { formatOdds } from "@/lib/utils";
 import { ManagerEditPopup } from "@/components/manager/ManagerEditPopup";
@@ -46,8 +51,11 @@ export function TicketSummary({ bet, onBetUpdate }: TicketSummaryProps) {
   const isLost = bet.status === "lost";
   const isOpen = bet.status === "open";
   const bonus = ticketBonus(bet);
-  const ret = totalReturn(bet);
-  const displayReturn = isOpen ? bet.potentialWin : ret;
+  const displayReturn = listDisplayReturn(bet);
+  const returnLabel = listReturnLabel(bet);
+  const showFreeBetGift = betUsedFreeBet(bet);
+  const showAfterVoid = betHasVoidLeg(bet) && !isOpen;
+  const showBonus = bonus > 0;
 
   const placedLabel = new Date(bet.placedAt)
     .toLocaleString("en-GB", {
@@ -70,51 +78,45 @@ export function TicketSummary({ bet, onBetUpdate }: TicketSummaryProps) {
           className={`w-full px-3 py-3 text-left ${canManage ? "cursor-pointer active:bg-white/5" : "cursor-default"}`}
           aria-label={canManage ? "Edit ticket summary" : undefined}
         >
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <p className="text-[11px] text-white/55">
-              Ticket ID: {ticketId(bet)}
-            </p>
-            <p className="mt-1 text-base font-bold text-[#f5c842]">{betTypeLabel(bet)}</p>
-          </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+          <p className="text-[11px] text-white/55">Ticket ID: {ticketId(bet)}</p>
+          <p className="text-right text-[11px] text-white/55">{placedLabel}</p>
 
-          <div className="text-right">
-            <p className="text-[11px] text-white/55">{placedLabel}</p>
-            <div className="mt-1 flex items-center justify-end gap-1.5">
-              {isWon && <TrophyBadge />}
-              <span
-                className={`text-sm font-bold ${isWon ? "text-accent" : isLost ? "text-live" : "text-amber-300"}`}
-              >
-                {statusHeadline(bet.status)}
-              </span>
-              <span
-                className={`text-2xl font-bold leading-none tabular-nums ${
-                  isWon ? "text-accent" : isLost ? "text-live" : "text-white"
-                }`}
-              >
-                {formatAmountPlain(displayReturn)}
-              </span>
-            </div>
+          <p className="text-base font-bold text-[#f5c842]">{betTypeLabel(bet)}</p>
+          <div aria-hidden className="min-h-[1.5rem]" />
+
+          <p className="self-center text-base font-bold text-white">{returnLabel}</p>
+          <div className="flex items-center justify-end gap-1.5 self-center">
+            {isWon && <TrophyBadge />}
+            <span
+              className={`text-sm font-bold ${isWon ? "text-accent" : isLost ? "text-live" : "text-amber-300"}`}
+            >
+              {statusHeadline(bet.status)}
+            </span>
+            <span
+              className={`text-2xl font-bold leading-none tabular-nums ${
+                isWon ? "text-accent" : isLost ? "text-live" : "text-white"
+              }`}
+            >
+              {formatAmountPlain(displayReturn)}
+            </span>
           </div>
         </div>
 
         <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
           <SummaryRow label="Total Stake" value={formatAmountPlain(bet.stake)} />
-          {isLost && (
+          {showFreeBetGift && (
             <SummaryRow label="Free Bet Gift" value={`-${formatAmountPlain(bet.stake)}`} />
           )}
-          <SummaryRow label="Total Odds (Original)" value={formatOdds(bet.totalOdds)} />
-          {bonus > 0 && isWon && (
+          <SummaryRow label="Total Odds" value={formatOdds(originalTicketOdds(bet))} />
+          {showBonus && (
             <SummaryRow label="Total Bonus" value={formatAmountPlain(bonus)} />
           )}
-          {(isWon || isLost) && (
+          {showAfterVoid && (
             <SummaryRow
               label="Total Odds (After Void)"
-              value={formatOdds(displayReturn / bet.stake || bet.totalOdds)}
+              value={formatOdds(totalOddsAfterVoid(bet))}
             />
-          )}
-          {isOpen && (
-            <SummaryRow label="Potential Return" value={formatAmountPlain(bet.potentialWin)} />
           )}
         </div>
       </button>

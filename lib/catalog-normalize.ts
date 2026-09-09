@@ -206,6 +206,8 @@ export function normalizeCatalogGame(item: RemoteCatalogGame, index = 0): Match 
     awayTeam,
     homeAbbr: item.home_abbr ?? abbr(homeTeam),
     awayAbbr: item.away_abbr ?? abbr(awayTeam),
+    homeLogoUrl: item.home_logo ?? null,
+    awayLogoUrl: item.away_logo ?? null,
     kickoff: String(item.starts_at ?? new Date().toISOString()),
     status: statusRaw,
     isLive,

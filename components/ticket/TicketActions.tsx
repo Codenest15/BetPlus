@@ -49,36 +49,7 @@ export function TicketActions({ status, onRemix, onShowOff }: TicketActionsProps
   }
 
   if (status === "lost") {
-    return (
-      <div className="flex flex-col gap-3 bg-brand px-3 py-3 sm:flex-row sm:items-center">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <svg className="h-7 w-7 shrink-0" viewBox="0 0 48 48" fill="none" aria-hidden>
-            <defs>
-              <linearGradient id="remix-bot" x1="12" y1="8" x2="36" y2="40">
-                <stop stopColor="#75c2d9" />
-                <stop offset="1" stopColor="#1a5568" />
-              </linearGradient>
-            </defs>
-            <rect x="12" y="14" width="24" height="22" rx="5" fill="url(#remix-bot)" stroke="#0f4658" strokeWidth="1.2" />
-            <circle cx="19" cy="24" r="3" fill="#ffffff" />
-            <circle cx="29" cy="24" r="3" fill="#ffffff" />
-            <path d="M20 30h8" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
-            <path d="M24 8v4M16 10l2 3M32 10l-2 3" stroke="#75c2d9" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-          <p className="text-xs leading-snug text-white/85 sm:text-sm">
-            Bounce back fast — remix and retry your bet!
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onRemix}
-          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded bg-brand-accent px-4 py-2.5 text-sm font-bold text-brand-dark active:brightness-95"
-        >
-          <RemixIcon />
-          Remix Bet
-        </button>
-      </div>
-    );
+    return null;
   }
 
   if (status === "open") {
