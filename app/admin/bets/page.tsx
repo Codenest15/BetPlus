@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
 import { DemoSeedPanel } from "@/components/admin/DemoSeedPanel";
 import { SettleBetMenu } from "@/components/admin/SettleBetMenu";
@@ -11,7 +11,10 @@ import { getAllBets } from "@/lib/bet-store";
 import { seedUser1DemoSlip } from "@/lib/demo-seed";
 import type { PlacedBet } from "@/lib/bet-types";
 import type { User } from "@/lib/user-types";
+import { adminGetBets, adminGetUsers, useBackendApi } from "@/lib/backend-client";
+import { backendBetToPlacedBet, backendUserToLocal } from "@/lib/backend-mappers";
 import { formatMoney } from "@/lib/utils";
+import { deferEffect } from "@/lib/defer-effect";
 
 const STATUS_CLASS: Record<PlacedBet["status"], string> = {
   open: "text-brand",
@@ -21,7 +24,9 @@ const STATUS_CLASS: Record<PlacedBet["status"], string> = {
 };
 
 export default function AdminBetsPage() {
+  const backendMode = useBackendApi();
   const [bets, setBets] = useState<PlacedBet[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [demo, setDemo] = useState<{
     user: User;
     bet: PlacedBet;
@@ -31,16 +36,27 @@ export default function AdminBetsPage() {
     PlacedBet["status"] | "all" | "claims" | "edit"
   >("all");
 
-  function reload() {
+  const reload = useCallback(async () => {
+    if (backendMode) {
+      setDemo(null);
+      const [remoteBets, remoteUsers] = await Promise.all([
+        adminGetBets(),
+        adminGetUsers(),
+      ]);
+      setBets(remoteBets.map(backendBetToPlacedBet));
+      setUsers(remoteUsers.map(backendUserToLocal));
+      return;
+    }
     setDemo(seedUser1DemoSlip());
     setBets(getAllBets());
-  }
+    setUsers(getAllUsers());
+  }, [backendMode]);
 
   useEffect(() => {
-    reload();
-  }, []);
-
-  const users = getAllUsers();
+    return deferEffect(() => {
+      void reload();
+    });
+  }, [reload]);
   const userName = (id: string) =>
     users.find((u) => u.id === id)?.name ?? id.slice(0, 8);
 
@@ -66,7 +82,7 @@ export default function AdminBetsPage() {
           </p>
         </div>
 
-        <DemoSeedPanel demo={demo} onReload={reload} />
+        {!backendMode && <DemoSeedPanel demo={demo} onReload={() => void reload()} />}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useBetSlip } from "@/lib/betslip-context";
 import type { PlacedBet } from "@/lib/bet-types";
 import { isDemoBetCode } from "@/lib/demo-bets";
-import { updateBetStatus } from "@/lib/bet-store";
 import {
   getLegDisplays,
   ticketId,
@@ -13,6 +12,7 @@ import {
   verifyCode,
 } from "@/lib/ticket-display";
 import { formatMoney } from "@/lib/utils";
+import { deferEffect } from "@/lib/defer-effect";
 import {
   hasSeenWinCelebration,
   markWinCelebrationSeen,
@@ -40,9 +40,11 @@ export function TicketDetails({ bet, onBetUpdate }: TicketDetailsProps) {
   const [showWinModal, setShowWinModal] = useState(false);
 
   useEffect(() => {
-    if (isWon && !hasSeenWinCelebration(bet.id)) {
-      setShowWinModal(true);
-    }
+    return deferEffect(() => {
+      if (isWon && !hasSeenWinCelebration(bet.id)) {
+        setShowWinModal(true);
+      }
+    });
   }, [bet.id, isWon]);
 
   function dismissWinCelebration() {
@@ -97,8 +99,7 @@ export function TicketDetails({ bet, onBetUpdate }: TicketDetailsProps) {
               <button
                 type="button"
                 onClick={() => {
-                  const u = updateBetStatus(bet.id, "won");
-                  if (u) onBetUpdate(u);
+                  onBetUpdate({ ...bet, status: "won" });
                 }}
                 className="rounded border border-accent px-3 py-1.5 text-xs font-semibold text-accent"
               >
@@ -107,8 +108,7 @@ export function TicketDetails({ bet, onBetUpdate }: TicketDetailsProps) {
               <button
                 type="button"
                 onClick={() => {
-                  const u = updateBetStatus(bet.id, "lost");
-                  if (u) onBetUpdate(u);
+                  onBetUpdate({ ...bet, status: "lost" });
                 }}
                 className="rounded border border-live px-3 py-1.5 text-xs font-semibold text-live"
               >

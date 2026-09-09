@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { deferEffect } from "@/lib/defer-effect";
 import { AdminGate } from "@/components/admin/AdminGate";
 import { SettleBetMenu } from "@/components/admin/SettleBetMenu";
 import { logAdminAction } from "@/lib/admin-store";
@@ -27,6 +28,12 @@ import {
   saveBetPickEdits,
   updateBetSupportClaim,
 } from "@/lib/bet-store";
+import {
+  adminGetBet,
+  adminPatchBet,
+  useBackendApi,
+} from "@/lib/backend-client";
+import { backendBetToPlacedBet, localSelectionToBackend } from "@/lib/backend-mappers";
 import type { BetSupportClaim, PlacedBet } from "@/lib/bet-types";
 import type { BetSelection } from "@/lib/types";
 import { formatMoney, formatOdds } from "@/lib/utils";
@@ -64,6 +71,7 @@ export default function AdminBetDetailPage() {
   const betId = params.id as string;
   const openSettleMenu = searchParams.get("settle") === "1";
 
+  const backendMode = useBackendApi();
   const [bet, setBet] = useState<PlacedBet | null>(null);
   const [selections, setSelections] = useState<BetSelection[]>([]);
   const [stake, setStake] = useState("");
@@ -75,7 +83,21 @@ export default function AdminBetDetailPage() {
   const [claimText, setClaimText] = useState("");
   const [claimNote, setClaimNote] = useState("");
 
-  function reload() {
+  async function reload() {
+    if (backendMode) {
+      try {
+        const remote = await adminGetBet(betId);
+        const loaded = backendBetToPlacedBet(remote);
+        setBet(loaded);
+        setSelections(loaded.selections.map((s) => ({ ...s })));
+        setStake(String(loaded.stake));
+        setTotalOdds(String(loaded.totalOdds));
+        setPotentialWin(String(loaded.potentialWin));
+      } catch {
+        setBet(null);
+      }
+      return;
+    }
     const loaded = getBetById(betId);
     if (loaded) {
       setBet(loaded);
@@ -87,8 +109,10 @@ export default function AdminBetDetailPage() {
   }
 
   useEffect(() => {
-    reload();
-  }, [betId]);
+    return deferEffect(() => {
+      void reload();
+    });
+  }, [betId, backendMode]);
 
   const originalSelections = bet ? getBetOriginalSelections(bet) : [];
 
@@ -111,7 +135,7 @@ export default function AdminBetDetailPage() {
     });
   }
 
-  function handleSavePicks(e: React.FormEvent) {
+  async function handleSavePicks(e: React.FormEvent) {
     e.preventDefault();
     if (!bet) return;
 
@@ -130,6 +154,21 @@ export default function AdminBetDetailPage() {
     const after = selections
       .map((s, i) => `Leg ${i + 1}: ${s.selectionLabel}`)
       .join("; ");
+
+    if (backendMode) {
+      try {
+        const remote = await adminPatchBet(betId, {
+          stake: stakeNum,
+          selections: selections.map(localSelectionToBackend),
+        });
+        const updated = backendBetToPlacedBet(remote);
+        setBet(updated);
+        setMessage("Picks saved. User ticket shows the slip as placed.");
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : "Failed to save picks");
+      }
+      return;
+    }
 
     const updated = saveBetPickEdits(betId, {
       selections,

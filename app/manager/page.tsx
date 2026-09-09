@@ -9,13 +9,24 @@ import {
   MANAGER_STATUS_LABELS,
   type ManagerMatchView,
 } from "@/lib/manager-matches-store";
+import { managerGetMatches, useBackendApi } from "@/lib/backend-client";
+import { backendMatchToView } from "@/lib/backend-mappers";
 
 export default function ManagerHomePage() {
+  const backendMode = useBackendApi();
   const [matches, setMatches] = useState<ManagerMatchView[]>([]);
 
   useEffect(() => {
-    setMatches(listManagerMatches());
-  }, []);
+    async function load() {
+      if (backendMode) {
+        const remote = await managerGetMatches();
+        setMatches(remote.map(backendMatchToView));
+        return;
+      }
+      setMatches(listManagerMatches());
+    }
+    void load();
+  }, [backendMode]);
 
   const managed = matches.filter((m) => m.managed);
   const open = managed.filter((m) => m.status === "not_started");

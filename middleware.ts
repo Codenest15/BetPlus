@@ -20,9 +20,22 @@ function isStaticAsset(pathname: string) {
   );
 }
 
+function isBackendRewritePath(pathname: string) {
+  return (
+    pathname.startsWith("/api/v1/") ||
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/wallet/") ||
+    pathname.startsWith("/api/bets/") ||
+    pathname.startsWith("/api/catalog/")
+  );
+}
+
 /** When ADMIN_ONLY=true (npm run dev:admin), only admin routes are reachable. */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  if (isBackendRewritePath(pathname)) {
+    return NextResponse.next();
+  }
   const adminOnly = process.env.ADMIN_ONLY === "true";
 
   if (isStaticAsset(pathname)) {
@@ -68,5 +81,7 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icons/|brand/|api/v1/|api/auth/|api/wallet/|api/bets/|api/catalog/).*)",
+  ],
 };

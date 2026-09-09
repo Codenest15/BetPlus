@@ -9,15 +9,37 @@ import {
   getAllManagersReferralOverview,
   type AdminManagerReferralRow,
 } from "@/lib/referral-store";
+import { adminGetReferrals, useBackendApi } from "@/lib/backend-client";
 import { formatMoney } from "@/lib/utils";
 
 export default function AdminManagersPage() {
   const router = useRouter();
+  const backendMode = useBackendApi();
   const [managers, setManagers] = useState<AdminManagerReferralRow[]>([]);
 
   useEffect(() => {
-    setManagers(getAllManagersReferralOverview());
-  }, []);
+    async function load() {
+      if (backendMode) {
+        const remote = await adminGetReferrals();
+        setManagers(
+          remote.map((row) => ({
+            managerId: row.manager_id,
+            name: row.name,
+            email: row.email,
+            referralCode: row.referral_code,
+            signupCount: row.signup_count,
+            totalDeposits: row.total_deposits,
+            grossRevenue: row.gross_revenue,
+            managerEarnings: row.manager_earnings,
+            platformEarnings: row.platform_earnings,
+          })),
+        );
+        return;
+      }
+      setManagers(getAllManagersReferralOverview());
+    }
+    void load();
+  }, [backendMode]);
 
   const totals = managers.reduce(
     (acc, row) => ({

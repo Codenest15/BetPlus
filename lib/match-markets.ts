@@ -98,6 +98,10 @@ export function getMarketsForMatch(
   match: Match,
   liveOptions?: LiveMarketStateOptions,
 ): BettingMarket[] {
+  if (match.markets && match.markets.length > 0) {
+    return applyLiveMarketState(match, match.markets, liveOptions);
+  }
+
   let markets: BettingMarket[];
   if (match.sport === "football") {
     markets = overlayCatalogMarkets(buildFootballMarkets(match), match);

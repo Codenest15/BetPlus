@@ -34,6 +34,8 @@ export interface Match {
   };
   /** Populated when loaded from BetPlus catalog API. */
   catalogMarkets?: BettingMarket[];
+  /** Server-provided markets. When present, UI must not invent odds. */
+  markets?: BettingMarket[];
 }
 
 export interface BetSelection {

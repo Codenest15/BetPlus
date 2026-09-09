@@ -10,6 +10,8 @@ import {
   type ManagerReferralStats,
   type ReferredUserSummary,
 } from "@/lib/referral-store";
+import { managerGetReferrals, useBackendApi } from "@/lib/backend-client";
+import { backendReferralStatsToLocal } from "@/lib/backend-mappers";
 import { formatMoney } from "@/lib/utils";
 
 function CopyInviteButton({ value }: { value: string }) {
@@ -120,14 +122,24 @@ function DetailRow({
 
 export function ManagerReferralsPanel() {
   const { user } = useAuth();
+  const backendMode = useBackendApi();
   const [stats, setStats] = useState<ManagerReferralStats | null>(null);
   const [selectedReferral, setSelectedReferral] =
     useState<ReferredUserSummary | null>(null);
 
   useEffect(() => {
     if (!user?.isManager) return;
-    setStats(getManagerReferralStats(user.id));
-  }, [user]);
+    const userId = user.id;
+    async function load() {
+      if (backendMode) {
+        const remote = await managerGetReferrals();
+        setStats(backendReferralStatsToLocal(remote, "manager"));
+        return;
+      }
+      setStats(getManagerReferralStats(userId));
+    }
+    void load();
+  }, [user, backendMode]);
 
   if (!user?.isManager || !stats) return null;
 

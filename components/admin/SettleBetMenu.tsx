@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { logAdminAction } from "@/lib/admin-store";
 import { adminSettleBet } from "@/lib/bet-store";
+import { adminSettleBetApi, useBackendApi } from "@/lib/backend-client";
+import { backendBetToPlacedBet } from "@/lib/backend-mappers";
 import type { PlacedBet } from "@/lib/bet-types";
 import { formatMoney } from "@/lib/utils";
 
@@ -19,14 +21,26 @@ export function SettleBetMenu({
   defaultOpen = false,
   size = "md",
 }: SettleBetMenuProps) {
+  const backendMode = useBackendApi();
   const [open, setOpen] = useState(defaultOpen);
 
   if (bet.status !== "open") {
     return <span className="text-[10px] text-muted">Settled</span>;
   }
 
-  function handleSettle(status: PlacedBet["status"]) {
-    const updated = adminSettleBet(bet.id, status);
+  async function handleSettle(status: PlacedBet["status"]) {
+    let updated: PlacedBet | null = null;
+    if (backendMode) {
+      try {
+        const remote = await adminSettleBetApi(bet.id, status);
+        updated = backendBetToPlacedBet(remote);
+      } catch {
+        onSettled?.(bet, "Could not settle bet");
+        return;
+      }
+    } else {
+      updated = adminSettleBet(bet.id, status);
+    }
     if (!updated) {
       onSettled?.(bet, "Could not settle bet");
       return;

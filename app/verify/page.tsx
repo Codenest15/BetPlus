@@ -10,19 +10,23 @@ import { useBetSlip } from "@/lib/betslip-context";
 import {
   buildTicketVerification,
   lookupTicketVerification,
+  lookupTicketVerificationAsync,
 } from "@/lib/ticket-verify";
+import { useBackendApi } from "@/lib/backend-client";
 
 export default function VerifyPage() {
   const router = useRouter();
+  const backendMode = useBackendApi();
   const { loadSlip } = useBetSlip();
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
+  const [verifying, setVerifying] = useState(false);
   const [mode, setMode] = useState<"ticket" | "slip">("ticket");
   const [verification, setVerification] = useState<
     ReturnType<typeof buildTicketVerification> | null
   >(null);
 
-  function handleVerify() {
+  async function handleVerify() {
     setError("");
     setVerification(null);
 
@@ -32,7 +36,28 @@ export default function VerifyPage() {
       return;
     }
 
-    const bet = lookupTicketVerification(normalized);
+    if (mode === "ticket") {
+      setVerifying(true);
+      try {
+        const bet = backendMode
+          ? await lookupTicketVerificationAsync(normalized)
+          : lookupTicketVerification(normalized);
+        if (bet) {
+          setVerification(buildTicketVerification(bet));
+          return;
+        }
+        setError(
+          "Ticket not found. Use the unique verify code from your settled slip.",
+        );
+      } finally {
+        setVerifying(false);
+      }
+      return;
+    }
+
+    const bet = backendMode
+      ? await lookupTicketVerificationAsync(normalized)
+      : lookupTicketVerification(normalized);
     if (bet) {
       setVerification(buildTicketVerification(bet));
       return;
@@ -141,10 +166,15 @@ export default function VerifyPage() {
 
         <button
           type="button"
-          onClick={handleVerify}
-          className="mt-3 w-full rounded-md bg-brand py-2 text-xs font-medium text-white hover:bg-brand-dark"
+          onClick={() => void handleVerify()}
+          disabled={verifying}
+          className="mt-3 w-full rounded-md bg-brand py-2 text-xs font-medium text-white hover:bg-brand-dark disabled:opacity-60"
         >
-          {mode === "ticket" ? "Verify ticket" : "Load code"}
+          {verifying
+            ? "Verifying..."
+            : mode === "ticket"
+              ? "Verify ticket"
+              : "Load code"}
         </button>
       </div>
 

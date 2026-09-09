@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
 import { DemoSeedPanel } from "@/components/admin/DemoSeedPanel";
 import { getAdminAuditLog } from "@/lib/admin-store";
@@ -12,9 +12,18 @@ import { seedUser1DemoSlip } from "@/lib/demo-seed";
 import type { PlacedBet } from "@/lib/bet-types";
 import type { User } from "@/lib/user-types";
 import { getAllManagersReferralOverview } from "@/lib/referral-store";
+import {
+  adminGetAudit,
+  adminGetLedger,
+  adminGetReferrals,
+  adminGetStats,
+  useBackendApi,
+} from "@/lib/backend-client";
 import { formatMoney } from "@/lib/utils";
+import { deferEffect } from "@/lib/defer-effect";
 
 export default function AdminDashboardPage() {
+  const backendMode = useBackendApi();
   const [stats, setStats] = useState({
     users: 0,
     bets: 0,
@@ -28,8 +37,54 @@ export default function AdminDashboardPage() {
     bet: PlacedBet;
     created: boolean;
   } | null>(null);
+  const [ledger, setLedger] = useState<{ id: string; description: string; amount: number }[]>([]);
+  const [audit, setAudit] = useState<{ id: string; action: string; detail: string; bookingCode?: string }[]>([]);
+  const [referralSummary, setReferralSummary] = useState({
+    managers: 0,
+    signups: 0,
+    gross: 0,
+  });
 
-  function reload() {
+  const reload = useCallback(async () => {
+    if (backendMode) {
+      setDemo(null);
+      const [remoteStats, remoteLedger, remoteAudit, remoteRefs] = await Promise.all([
+        adminGetStats(),
+        adminGetLedger(),
+        adminGetAudit(),
+        adminGetReferrals(),
+      ]);
+      setStats({
+        users: remoteStats.users,
+        bets: remoteStats.bets,
+        open: remoteStats.open_bets,
+        totalBalance: remoteStats.total_user_balance,
+        platformBalance: remoteStats.platform_balance,
+        netPosition: remoteStats.net_position,
+      });
+      setLedger(
+        remoteLedger.slice(0, 8).map((e) => ({
+          id: e.id,
+          description: e.description,
+          amount: e.amount,
+        })),
+      );
+      setAudit(
+        remoteAudit.slice(0, 5).map((e) => ({
+          id: e.id,
+          action: e.action,
+          detail: e.detail,
+          bookingCode: e.booking_code ?? undefined,
+        })),
+      );
+      setReferralSummary({
+        managers: remoteRefs.length,
+        signups: remoteRefs.reduce((s, r) => s + r.signup_count, 0),
+        gross: remoteRefs.reduce((s, r) => s + r.gross_revenue, 0),
+      });
+      return;
+    }
+
     setDemo(seedUser1DemoSlip());
     const users = getAllUsers();
     const bets = getAllBets();
@@ -43,23 +98,21 @@ export default function AdminDashboardPage() {
       platformBalance: platform.platformBalance,
       netPosition: platform.netPosition,
     });
-  }
+    setLedger(getPlatformLedger().slice(0, 8));
+    setAudit(getAdminAuditLog().slice(0, 5));
+    const managerOverview = getAllManagersReferralOverview();
+    setReferralSummary({
+      managers: managerOverview.length,
+      signups: managerOverview.reduce((s, r) => s + r.signupCount, 0),
+      gross: managerOverview.reduce((s, r) => s + r.grossRevenue, 0),
+    });
+  }, [backendMode]);
 
   useEffect(() => {
-    reload();
-  }, []);
-
-  const recentAudit = getAdminAuditLog().slice(0, 5);
-  const platformLedger = getPlatformLedger().slice(0, 8);
-  const managerOverview = getAllManagersReferralOverview();
-  const referralGross = managerOverview.reduce(
-    (sum, row) => sum + row.grossRevenue,
-    0,
-  );
-  const referralSignups = managerOverview.reduce(
-    (sum, row) => sum + row.signupCount,
-    0,
-  );
+    return deferEffect(() => {
+      void reload();
+    });
+  }, [reload]);
 
   return (
     <AdminGate>
@@ -69,7 +122,7 @@ export default function AdminDashboardPage() {
           <p className="text-xs text-muted">Platform overview</p>
         </div>
 
-        <DemoSeedPanel demo={demo} onReload={reload} />
+        {!backendMode && <DemoSeedPanel demo={demo} onReload={() => void reload()} />}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
@@ -92,11 +145,11 @@ export default function AdminDashboardPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <section className="card p-3">
             <h2 className="section-label mb-2">Platform ledger</h2>
-            {platformLedger.length === 0 ? (
+            {ledger.length === 0 ? (
               <p className="text-xs text-muted">No platform movements yet.</p>
             ) : (
               <ul className="space-y-1.5">
-                {platformLedger.map((entry) => (
+                {ledger.map((entry) => (
                   <li key={entry.id} className="text-[11px]">
                     <span className="font-medium">{entry.description}</span>
                     <span
@@ -135,23 +188,15 @@ export default function AdminDashboardPage() {
               >
                 Manage bets
               </Link>
-              {demo && (
-                <Link
-                  href={`/admin/bets/${demo.bet.id}`}
-                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted"
-                >
-                  Edit User1 slip
-                </Link>
-              )}
             </div>
           </section>
 
           <section className="card p-3">
             <h2 className="section-label mb-2">Manager referrals</h2>
             <p className="text-xs text-muted">
-              {managerOverview.length} manager
-              {managerOverview.length === 1 ? "" : "s"} · {referralSignups}{" "}
-              referral signups · {formatMoney(referralGross)} gross revenue
+              {referralSummary.managers} manager
+              {referralSummary.managers === 1 ? "" : "s"} · {referralSummary.signups}{" "}
+              referral signups · {formatMoney(referralSummary.gross)} gross revenue
             </p>
             <Link
               href="/admin/managers"
@@ -163,11 +208,11 @@ export default function AdminDashboardPage() {
 
           <section className="card p-3">
             <h2 className="section-label mb-2">Recent admin actions</h2>
-            {recentAudit.length === 0 ? (
+            {audit.length === 0 ? (
               <p className="text-xs text-muted">No actions logged yet.</p>
             ) : (
               <ul className="space-y-1.5">
-                {recentAudit.map((entry) => (
+                {audit.map((entry) => (
                   <li key={entry.id} className="text-[11px]">
                     <span className="font-medium text-foreground">{entry.action}</span>
                     <span className="text-muted"> — {entry.detail}</span>

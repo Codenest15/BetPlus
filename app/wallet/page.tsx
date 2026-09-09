@@ -1,12 +1,21 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { addTransaction, getTransactionsByUser } from "@/lib/bet-store";
 import { recordUserDeposit, recordUserWithdrawal } from "@/lib/platform-store";
 import { trackReferralDeposit } from "@/lib/referral-store";
 import { updateUserBalance } from "@/lib/auth-store";
+import {
+  ApiError,
+  initiateDeposit,
+  initiateWithdrawal,
+  getTransactions as apiGetTransactions,
+  useBackendApi,
+} from "@/lib/backend-client";
+import { backendTransactionToLocal } from "@/lib/backend-mappers";
+import type { Transaction } from "@/lib/bet-types";
 import {
   DEPOSIT_METHODS,
   MOBILE_NETWORKS,
@@ -26,6 +35,7 @@ import {
   type WithdrawMethod,
 } from "@/lib/payment-methods";
 import { CURRENCY_SYMBOL, formatMoney } from "@/lib/utils";
+import { deferEffect } from "@/lib/defer-effect";
 
 const DEPOSIT_AMOUNTS = [20, 50, 100, 200, 500];
 const WITHDRAW_AMOUNTS = [20, 50, 100, 200];
@@ -76,6 +86,7 @@ function CopyButton({ value }: { value: string }) {
 }
 
 export default function WalletPage() {
+  const backendMode = useBackendApi();
   const { user, openLogin, refreshUser } = useAuth();
   const [tab, setTab] = useState<"deposit" | "withdraw" | "history">("deposit");
   const [amount, setAmount] = useState(50);
@@ -92,6 +103,36 @@ export default function WalletPage() {
   const [cardCvv, setCardCvv] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [txLoading, setTxLoading] = useState(false);
+  const [txError, setTxError] = useState("");
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  const loadTransactions = useCallback(async () => {
+    if (!user || !backendMode) return;
+    setTxLoading(true);
+    setTxError("");
+    try {
+      const remote = await apiGetTransactions();
+      setTransactions(remote.map(backendTransactionToLocal));
+    } catch (err) {
+      setTxError(err instanceof Error ? err.message : "Failed to load transactions");
+    } finally {
+      setTxLoading(false);
+    }
+  }, [user, backendMode]);
+
+  useEffect(() => {
+    return deferEffect(() => {
+      if (!user) {
+        setTransactions([]);
+        return;
+      }
+      if (backendMode) {
+        void loadTransactions();
+      }
+    });
+  }, [user, backendMode, loadTransactions]);
 
   if (!user) {
     return (
@@ -114,7 +155,8 @@ export default function WalletPage() {
     );
   }
 
-  const transactions = getTransactionsByUser(user.id);
+  const localTransactions = getTransactionsByUser(user.id);
+  const displayTransactions = backendMode ? transactions : localTransactions;
   const userId = user.id;
   const balance = user.balance;
   const activeMethod = tab === "deposit" ? depositMethod : withdrawMethod;
@@ -124,7 +166,32 @@ export default function WalletPage() {
     setError("");
   }
 
-  function creditWallet(description: string) {
+  async function creditWallet(description: string) {
+    if (backendMode) {
+      setSubmitting(true);
+      try {
+        const payment = await initiateDeposit(amount, "mobile_money");
+        if (payment.authorization_url) {
+          window.location.href = payment.authorization_url;
+          return true;
+        }
+        if (payment.status !== "completed") {
+          setError("Payment is pending confirmation");
+          return false;
+        }
+        await refreshUser();
+        await loadTransactions();
+        setCryptoStep(false);
+        setMessage(`Deposited ${formatMoney(amount)} successfully`);
+        return true;
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Deposit failed");
+        return false;
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
     const result = updateUserBalance(userId, amount);
     if ("error" in result) {
       setError(result.error);
@@ -159,8 +226,9 @@ export default function WalletPage() {
     return true;
   }
 
-  function handleDeposit() {
+  async function handleDeposit() {
     resetMessages();
+    if (submitting) return;
     if (amount < 1) {
       setError("Minimum deposit is GH₵1");
       return;
@@ -172,13 +240,13 @@ export default function WalletPage() {
         setError("Enter a valid mobile money number");
         return;
       }
-      creditWallet(`${mobileNetworkLabel(mobileNetwork)} deposit`);
+      await creditWallet(`${mobileNetworkLabel(mobileNetwork)} deposit`);
       return;
     }
 
     if (depositMethod === "visa") {
       if (!validateVisaCard()) return;
-      creditWallet(`Visa deposit •••• ${cardLastFour(cardNumber)}`);
+      await creditWallet(`Visa deposit •••• ${cardLastFour(cardNumber)}`);
       return;
     }
 
@@ -188,7 +256,7 @@ export default function WalletPage() {
         return;
       }
 
-      creditWallet(
+      await creditWallet(
         depositMethod === "btc"
           ? "Bitcoin (BTC) deposit"
           : `USDT deposit (${usdtNetwork.toUpperCase()})`,
@@ -196,8 +264,9 @@ export default function WalletPage() {
     }
   }
 
-  function handleWithdraw() {
+  async function handleWithdraw() {
     resetMessages();
+    if (submitting) return;
     if (amount < 1) {
       setError("Minimum withdrawal is GH₵1");
       return;
@@ -220,18 +289,33 @@ export default function WalletPage() {
       return;
     }
 
-    const result = updateUserBalance(userId, -amount);
-    if ("error" in result) {
-      setError(result.error);
-      return;
-    }
-
     const description =
       withdrawMethod === "mobile-money"
         ? `Withdrawal to ${mobileNetworkLabel(mobileNetwork)}`
         : withdrawMethod === "visa"
           ? `Withdrawal to Visa •••• ${cardLastFour(cardNumber)}`
           : `Withdrawal to ${withdrawMethod.toUpperCase()}`;
+
+    if (backendMode) {
+      setSubmitting(true);
+      try {
+        await initiateWithdrawal(amount, "mobile_money", description);
+        await refreshUser();
+        await loadTransactions();
+        setMessage(`Withdrawal of ${formatMoney(amount)} submitted`);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Withdrawal failed");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    const result = updateUserBalance(userId, -amount);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
 
     addTransaction({ userId, type: "withdraw", amount: -amount, description });
     recordUserWithdrawal(userId, amount, description);
@@ -449,7 +533,7 @@ export default function WalletPage() {
                 </label>
               </div>
               <p className="text-[10px] leading-snug text-muted">
-                Demo only — connect a PCI-compliant gateway (e.g. Paystack, Stripe) for
+                Demo only — connect a PCI-compliant gateway (e.g. Moolre, Stripe) for
                 live card processing.
               </p>
             </div>
@@ -620,28 +704,44 @@ export default function WalletPage() {
 
           <button
             type="button"
-            onClick={tab === "deposit" ? handleDeposit : handleWithdraw}
-            className="w-full rounded-md bg-brand py-2.5 text-xs font-semibold text-white hover:bg-brand-dark"
+            onClick={() => void (tab === "deposit" ? handleDeposit() : handleWithdraw())}
+            disabled={submitting}
+            className="w-full rounded-md bg-brand py-2.5 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
           >
-            {tab === "deposit"
-              ? cryptoStep && (depositMethod === "btc" || depositMethod === "usdt")
-                ? "I have sent payment"
-                : depositMethod === "mobile-money"
-                  ? "Pay with Mobile Money"
-                  : depositMethod === "visa"
-                    ? "Pay with Visa"
-                    : "Continue"
-              : "Withdraw"}
+            {submitting
+              ? "Processing..."
+              : tab === "deposit"
+                ? cryptoStep && (depositMethod === "btc" || depositMethod === "usdt")
+                  ? "I have sent payment"
+                  : depositMethod === "mobile-money"
+                    ? "Pay with Mobile Money"
+                    : depositMethod === "visa"
+                      ? "Pay with Visa"
+                      : "Continue"
+                : "Withdraw"}
           </button>
         </>
       )}
 
       {tab === "history" && (
         <ul className="card divide-y divide-border/60 overflow-hidden">
-          {transactions.length === 0 ? (
+          {txLoading ? (
+            <li className="py-6 text-center text-xs text-muted">Loading transactions...</li>
+          ) : txError ? (
+            <li className="space-y-2 py-6 text-center">
+              <p className="text-xs text-live">{txError}</p>
+              <button
+                type="button"
+                onClick={() => void loadTransactions()}
+                className="text-xs font-medium text-brand hover:underline"
+              >
+                Retry
+              </button>
+            </li>
+          ) : displayTransactions.length === 0 ? (
             <li className="py-6 text-center text-xs text-muted">No transactions yet</li>
           ) : (
-            transactions.map((tx) => (
+            displayTransactions.map((tx) => (
               <li
                 key={tx.id}
                 className="flex items-center justify-between px-3 py-2"

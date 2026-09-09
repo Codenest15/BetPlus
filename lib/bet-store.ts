@@ -483,7 +483,7 @@ export function managerUpdateBetLeg(
     bet.stake,
   );
 
-  let legResults = [...(bet.legResults ?? [])];
+  const legResults = [...(bet.legResults ?? [])];
   const resultIdx = legResults.findIndex((r) => r.legIndex === input.legIndex);
   const defaultScores = getMatchFtScore(leg.matchId);
   const homeScore = hasFt ? input.ftHomeScore! : defaultScores.home;

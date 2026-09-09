@@ -2,38 +2,85 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
 import { getUserById, grantFreeBetBalance, setUserBalance, setUserManagerRole } from "@/lib/auth-store";
 import { getBetsByUser, getTransactionsByUser } from "@/lib/bet-store";
 import { logAdminAction } from "@/lib/admin-store";
 import type { PlacedBet } from "@/lib/bet-types";
+import type { Transaction } from "@/lib/bet-types";
 import type { User } from "@/lib/user-types";
+import {
+  adminGetUser,
+  adminGetUserBets,
+  adminGetUserTransactions,
+  adminPatchUser,
+  useBackendApi,
+} from "@/lib/backend-client";
+import { backendBetToPlacedBet, backendTransactionToLocal, backendUserToLocal } from "@/lib/backend-mappers";
+import { deferEffect } from "@/lib/defer-effect";
 import { formatMoney } from "@/lib/utils";
 
 export default function AdminUserDetailPage() {
   const params = useParams();
   const userId = params.id as string;
+  const backendMode = useBackendApi();
   const [user, setUser] = useState<User | null>(null);
   const [bets, setBets] = useState<PlacedBet[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [balanceInput, setBalanceInput] = useState("");
   const [freeBetInput, setFreeBetInput] = useState("");
   const [message, setMessage] = useState("");
 
-  useEffect(() => {
+  const load = useCallback(async () => {
+    if (backendMode) {
+      try {
+        const [remoteUser, remoteBets, remoteTx] = await Promise.all([
+          adminGetUser(userId),
+          adminGetUserBets(userId),
+          adminGetUserTransactions(userId),
+        ]);
+        const mapped = backendUserToLocal(remoteUser);
+        setUser(mapped);
+        setBalanceInput(String(mapped.balance));
+        setBets(remoteBets.map(backendBetToPlacedBet));
+        setTransactions(remoteTx.map(backendTransactionToLocal));
+      } catch {
+        setUser(null);
+      }
+      return;
+    }
     const u = getUserById(userId);
     setUser(u);
     if (u) {
       setBalanceInput(String(u.balance));
       setBets(getBetsByUser(userId));
+      setTransactions(getTransactionsByUser(userId));
     }
-  }, [userId]);
+  }, [backendMode, userId]);
 
-  function handleSetBalance(e: React.FormEvent) {
+  useEffect(() => {
+    return deferEffect(() => {
+      void load();
+    });
+  }, [load]);
+
+  async function handleSetBalance(e: React.FormEvent) {
     e.preventDefault();
     const balance = Number.parseFloat(balanceInput);
     if (!Number.isFinite(balance) || balance < 0) {
       setMessage("Enter a valid balance");
+      return;
+    }
+
+    if (backendMode) {
+      try {
+        const remote = await adminPatchUser(userId, { balance });
+        setUser(backendUserToLocal(remote));
+        setMessage("Balance updated");
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : "Update failed");
+      }
       return;
     }
 
@@ -74,9 +121,23 @@ export default function AdminUserDetailPage() {
     setMessage("Free bet reward granted");
   }
 
-  function handleToggleManager() {
+  async function handleToggleManager() {
     if (!user) return;
     const next = !user.isManager;
+    if (backendMode) {
+      try {
+        const remote = await adminPatchUser(userId, { is_manager: next });
+        setUser(backendUserToLocal(remote));
+        setMessage(
+          next
+            ? `${remote.name} is now a manager — Manager tab will show in their app.`
+            : `Manager access removed for ${remote.name}.`,
+        );
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : "Update failed");
+      }
+      return;
+    }
     const result = setUserManagerRole(userId, next);
     if ("error" in result) {
       setMessage(result.error);
@@ -105,7 +166,9 @@ export default function AdminUserDetailPage() {
     );
   }
 
-  const transactions = getTransactionsByUser(userId);
+  const displayTransactions = backendMode
+    ? transactions
+    : getTransactionsByUser(userId);
 
   return (
     <AdminGate>
@@ -232,7 +295,7 @@ export default function AdminUserDetailPage() {
             <p className="text-xs text-muted">No transactions.</p>
           ) : (
             <ul className="space-y-1.5 text-xs">
-              {transactions.slice(0, 20).map((tx) => (
+              {displayTransactions.slice(0, 20).map((tx) => (
                 <li key={tx.id} className="flex justify-between gap-2">
                   <span>{tx.description}</span>
                   <span className={tx.amount >= 0 ? "text-accent" : "text-live"}>
