@@ -34,10 +34,18 @@ import {
   type UsdtNetwork,
   type WithdrawMethod,
 } from "@/lib/payment-methods";
+import {
+  defaultDepositAmount,
+  depositAmountSymbol,
+  depositQuickAmounts,
+  formatDepositAmount,
+  minDepositAmount,
+  validateDepositAmount,
+  walletDepositMarket,
+} from "@/lib/deposit-limits";
 import { CURRENCY_SYMBOL, formatMoney } from "@/lib/utils";
 import { deferEffect } from "@/lib/defer-effect";
 
-const DEPOSIT_AMOUNTS = [20, 50, 100, 200, 500];
 const WITHDRAW_AMOUNTS = [20, 50, 100, 200];
 
 function PaymentMethodIcon({
@@ -89,7 +97,7 @@ export default function WalletPage() {
   const backendMode = useBackendApi();
   const { user, openLogin, refreshUser } = useAuth();
   const [tab, setTab] = useState<"deposit" | "withdraw" | "history">("deposit");
-  const [amount, setAmount] = useState(50);
+  const [amount, setAmount] = useState(250);
   const [depositMethod, setDepositMethod] = useState<DepositMethod>("mobile-money");
   const [withdrawMethod, setWithdrawMethod] = useState<WithdrawMethod>("mobile-money");
   const [mobileNetwork, setMobileNetwork] = useState<MobileNetwork>("mtn");
@@ -134,6 +142,15 @@ export default function WalletPage() {
     });
   }, [user, backendMode, loadTransactions]);
 
+  useEffect(() => {
+    if (!user?.phone) return;
+    return deferEffect(() => {
+      const market = walletDepositMarket(user.phone);
+      const min = minDepositAmount(market);
+      setAmount((prev) => (prev < min ? defaultDepositAmount(market) : prev));
+    });
+  }, [user?.phone]);
+
   if (!user) {
     return (
       <div className="space-y-4">
@@ -159,6 +176,10 @@ export default function WalletPage() {
   const displayTransactions = backendMode ? transactions : localTransactions;
   const userId = user.id;
   const balance = user.balance;
+  const depositMarket = walletDepositMarket(user.phone);
+  const minDeposit = minDepositAmount(depositMarket);
+  const depositSymbol = depositAmountSymbol(depositMarket);
+  const depositPresets = depositQuickAmounts(depositMarket);
   const activeMethod = tab === "deposit" ? depositMethod : withdrawMethod;
 
   function resetMessages() {
@@ -167,6 +188,12 @@ export default function WalletPage() {
   }
 
   async function creditWallet(description: string) {
+    const depositError = validateDepositAmount(amount, depositMarket);
+    if (depositError) {
+      setError(depositError);
+      return false;
+    }
+
     if (backendMode) {
       setSubmitting(true);
       try {
@@ -229,8 +256,9 @@ export default function WalletPage() {
   async function handleDeposit() {
     resetMessages();
     if (submitting) return;
-    if (amount < 1) {
-      setError("Minimum deposit is GH₵1");
+    const depositError = validateDepositAmount(amount, depositMarket);
+    if (depositError) {
+      setError(depositError);
       return;
     }
 
@@ -663,7 +691,7 @@ export default function WalletPage() {
             )}
 
           <div className="flex flex-wrap gap-1.5">
-            {(tab === "deposit" ? DEPOSIT_AMOUNTS : WITHDRAW_AMOUNTS).map((a) => (
+            {(tab === "deposit" ? depositPresets : WITHDRAW_AMOUNTS).map((a) => (
               <button
                 key={a}
                 type="button"
@@ -677,19 +705,20 @@ export default function WalletPage() {
                     : "border-border/80 text-muted"
                 }`}
               >
-                {CURRENCY_SYMBOL}
-                {a}
+                {tab === "deposit"
+                  ? formatDepositAmount(a, depositMarket)
+                  : `${CURRENCY_SYMBOL}${a}`}
               </button>
             ))}
           </div>
 
           <label className="block">
             <span className="mb-1 block text-[11px] text-muted">
-              Amount ({CURRENCY_SYMBOL})
+              Amount ({tab === "deposit" ? depositSymbol : CURRENCY_SYMBOL})
             </span>
             <input
               type="number"
-              min={1}
+              min={tab === "deposit" ? minDeposit : 1}
               value={amount}
               onChange={(e) => {
                 setAmount(Number(e.target.value) || 0);
@@ -697,6 +726,13 @@ export default function WalletPage() {
               }}
               className="w-full rounded-md border border-border/80 bg-surface-elevated px-3 py-2 text-sm font-medium outline-none focus:border-brand"
             />
+            {tab === "deposit" && (
+              <p className="mt-1 text-[10px] text-muted">
+                Minimum deposit{" "}
+                {formatDepositAmount(minDeposit, depositMarket)}
+                {depositMarket === "international" ? " (non-Ghana accounts)" : ""}
+              </p>
+            )}
           </label>
 
           {error && <p className="text-xs text-live">{error}</p>}
