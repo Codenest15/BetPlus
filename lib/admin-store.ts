@@ -23,14 +23,18 @@ export async function checkAdminSession(): Promise<boolean> {
   }
 }
 
-export async function adminLogin(email: string, password: string): Promise<boolean> {
+export async function adminLogin(
+  phoneCountry: string,
+  phone: string,
+  password: string,
+): Promise<boolean> {
   if (typeof window === "undefined") return false;
   try {
     const res = await fetch("/api/admin/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ phoneCountry, phone, password }),
     });
     if (!res.ok) return false;
     const data = (await res.json()) as { access_token?: string | null };

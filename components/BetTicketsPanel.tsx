@@ -9,6 +9,7 @@ import { getMyBets, useBackendApi } from "@/lib/backend-client";
 import { backendBetToPlacedBet } from "@/lib/backend-mappers";
 import { deferEffect } from "@/lib/defer-effect";
 import type { BetStatus, PlacedBet } from "@/lib/bet-types";
+import { openBetSlipRevision } from "@/lib/ticket-display";
 
 export type TicketsTab = "open-bets" | "bet-history";
 export type SettledFilter = "unsettled" | "settled" | "all";
@@ -301,7 +302,7 @@ export function BetTicketsPanel({
                 <p className="mb-2 text-xs font-medium text-muted">{date}</p>
                 <ul className="space-y-3">
                   {bets.map((bet) => (
-                    <li key={bet.id}>
+                    <li key={`${bet.id}-${openBetSlipRevision(bet)}`}>
                       <BetHistoryCard
                         bet={bet}
                         onRemix={() => handleRemix(bet)}

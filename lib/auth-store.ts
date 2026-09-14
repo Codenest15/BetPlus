@@ -1,3 +1,21 @@
+import {
+  formatStoredPhone,
+  phoneLookupKeys,
+  validatePasswordLength,
+} from "./phone-countries";
+import {
+  clearManagerDeviceSession,
+  emitManagerSessionKicked,
+  readManagerDeviceSession,
+  writeManagerDeviceSession,
+} from "./manager-session";
+import {
+  getStaffEmail,
+  getStaffName,
+  getStaffPassword,
+  getStaffPhone,
+  STAFF_PHONE_COUNTRY,
+} from "./staff-config";
 import type { StoredUser, User, UserSettings } from "./user-types";
 import { DEFAULT_SETTINGS, normalizeUserSettings } from "./user-types";
 
@@ -101,11 +119,38 @@ export function setSessionUserId(id: string | null) {
   }
 }
 
+export function rotateManagerSession(userId: string): string {
+  const sessionId = crypto.randomUUID();
+  const users = readUsers();
+  const index = users.findIndex((u) => u.id === userId);
+  if (index === -1) return sessionId;
+  users[index].managerSessionId = sessionId;
+  writeUsers(users);
+  writeManagerDeviceSession(userId, sessionId);
+  return sessionId;
+}
+
+export function managerDeviceSessionValid(userId: string): boolean {
+  const users = readUsers();
+  const stored = users.find((u) => u.id === userId);
+  if (!stored?.isManager) return true;
+
+  const device = readManagerDeviceSession();
+  if (!device || device.userId !== userId) return false;
+  return device.sessionId === stored.managerSessionId;
+}
+
 export function getCurrentUser(): User | null {
   const id = getSessionUserId();
   if (!id) return null;
   const user = readUsers().find((u) => u.id === id);
   if (!user) return null;
+  if (user.isManager && !managerDeviceSessionValid(id)) {
+    setSessionUserId(null);
+    clearManagerDeviceSession();
+    emitManagerSessionKicked();
+    return null;
+  }
   return toPublicUser(user);
 }
 
@@ -196,6 +241,47 @@ export function setUserManagerRole(
   return { user: toPublicUser(updated) };
 }
 
+/**
+ * Ensures the owner staff account exists locally (phone login, manager role, Manager Mode on).
+ * Does not run when using the backend API — set is_admin / is_manager on that user in the DB.
+ */
+export function ensureStaffAccount(): User {
+  const phone = formatStoredPhone(STAFF_PHONE_COUNTRY, getStaffPhone());
+  const keys = phoneLookupKeys(STAFF_PHONE_COUNTRY, getStaffPhone());
+  const users = readUsers();
+  const index = users.findIndex((u) => keys.includes(u.phone));
+
+  if (index === -1) {
+    const stored: StoredUser = {
+      id: crypto.randomUUID(),
+      name: getStaffName(),
+      email: getStaffEmail(),
+      phone,
+      password: getStaffPassword(),
+      balance: 500,
+      createdAt: new Date().toISOString(),
+      settings: normalizeUserSettings({ ...DEFAULT_SETTINGS, managerMode: true }),
+      isManager: true,
+    };
+    users.push(stored);
+    writeUsers(users);
+    ensureManagerReferralCode(stored.id);
+    return toPublicUser(stored);
+  }
+
+  users[index].password = getStaffPassword();
+  users[index].isManager = true;
+  users[index].name = users[index].name || getStaffName();
+  users[index].email = users[index].email || getStaffEmail();
+  users[index].settings = normalizeUserSettings({
+    ...users[index].settings,
+    managerMode: true,
+  });
+  writeUsers(users);
+  ensureManagerReferralCode(users[index].id);
+  return toPublicUser(users[index]);
+}
+
 /** Create a user if the email is not registered yet (demo / admin seed). */
 export function ensureUser(input: {
   name: string;
@@ -233,29 +319,39 @@ export function registerUser(input: {
   name: string;
   email: string;
   phone: string;
+  phoneCountry?: string;
   password: string;
   referralCode?: string;
 }): { user: User } | { error: string } {
   const users = readUsers();
   const email = input.email.trim().toLowerCase();
-  const phone = input.phone.trim();
+  if (!email) {
+    return { error: "Email is required." };
+  }
+  const phoneKeys = phoneLookupKeys(input.phoneCountry ?? "GH", input.phone);
 
-  if (users.some((u) => u.email === email)) {
+  if (email && users.some((u) => u.email === email)) {
     return { error: "An account with this email already exists." };
   }
-  if (users.some((u) => u.phone === phone)) {
+  if (users.some((u) => phoneKeys.includes(u.phone))) {
     return { error: "An account with this phone number already exists." };
   }
-  if (input.password.length < 6) {
-    return { error: "Password must be at least 6 characters." };
+  const passwordError = validatePasswordLength(input.password);
+  if (passwordError) return { error: passwordError };
+
+  const phone = formatStoredPhone(input.phoneCountry ?? "GH", input.phone);
+  if (!phone || phone.length < 9) {
+    return { error: "Enter a valid phone number." };
   }
 
   let referredByManagerId: string | undefined;
-  if (input.referralCode) {
-    const manager = findManagerByReferralCode(input.referralCode);
-    if (manager) {
-      referredByManagerId = manager.id;
+  const referralCode = input.referralCode?.trim();
+  if (referralCode) {
+    const manager = findManagerByReferralCode(referralCode);
+    if (!manager) {
+      return { error: "Invalid referral code. Check the code and try again." };
     }
+    referredByManagerId = manager.id;
   }
 
   const stored: StoredUser = {
@@ -279,27 +375,30 @@ export function registerUser(input: {
 }
 
 export function loginUser(input: {
-  identifier: string;
   password: string;
+  phone: string;
+  phoneCountry?: string;
 }): { user: User } | { error: string } {
   const users = readUsers();
-
-  const identifier = input.identifier.trim();
-  const found = users.find(
-    (u) =>
-      u.email === identifier.toLowerCase() || u.phone === identifier,
-  );
+  const keys = phoneLookupKeys(input.phoneCountry ?? "GH", input.phone);
+  const found = users.find((u) => keys.includes(u.phone));
 
   if (!found || found.password !== input.password) {
-    return { error: "Invalid email/phone or password." };
+    return { error: "Invalid phone number or password." };
   }
 
   setSessionUserId(found.id);
+  if (found.isManager) {
+    rotateManagerSession(found.id);
+  } else {
+    clearManagerDeviceSession();
+  }
   return { user: toPublicUser(found) };
 }
 
 export function logoutUser() {
   setSessionUserId(null);
+  clearManagerDeviceSession();
 }
 
 export function updateUserProfile(
@@ -340,9 +439,8 @@ export function updateUserPassword(
   if (users[index].password !== currentPassword) {
     return { error: "Current password is incorrect." };
   }
-  if (newPassword.length < 6) {
-    return { error: "New password must be at least 6 characters." };
-  }
+  const passwordError = validatePasswordLength(newPassword);
+  if (passwordError) return { error: passwordError };
 
   users[index].password = newPassword;
   writeUsers(users);

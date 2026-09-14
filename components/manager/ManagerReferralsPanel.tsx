@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { ManagerEditPopup } from "@/components/manager/ManagerEditPopup";
 import { useAuth } from "@/lib/auth-context";
 import {
-  MANAGER_REFERRAL_SHARE,
   REFERRAL_COMMISSION_RATE,
   getManagerReferralStats,
   type ManagerReferralStats,
@@ -77,7 +76,7 @@ function ReferredUserDetailPopup({
             value={`${referral.depositCount} transaction${referral.depositCount === 1 ? "" : "s"}`}
           />
           <DetailRow
-            label="Your earnings (50%)"
+            label="Your earnings (70%)"
             value={formatMoney(referral.commissionEarned)}
             highlight
           />
@@ -144,7 +143,6 @@ export function ManagerReferralsPanel() {
   if (!user?.isManager || !stats) return null;
 
   const commissionPct = Math.round(REFERRAL_COMMISSION_RATE * 100);
-  const managerSharePct = Math.round(MANAGER_REFERRAL_SHARE * 100);
 
   return (
     <>
@@ -188,7 +186,7 @@ export function ManagerReferralsPanel() {
           </div>
           <div className="card p-4">
             <p className="text-[11px] text-muted">
-              Your earnings ({managerSharePct}% of referral revenue)
+              Your earnings (70% of referral revenue)
             </p>
             <p className="mt-1 text-2xl font-bold text-brand-dark">
               {formatMoney(stats.managerEarnings)}

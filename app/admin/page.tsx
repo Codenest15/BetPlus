@@ -3,14 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
-import { DemoSeedPanel } from "@/components/admin/DemoSeedPanel";
 import { getAdminAuditLog } from "@/lib/admin-store";
 import { getAllBets } from "@/lib/bet-store";
 import { getAllUsers } from "@/lib/auth-store";
 import { getPlatformStats, getPlatformLedger } from "@/lib/platform-store";
-import { seedUser1DemoSlip } from "@/lib/demo-seed";
-import type { PlacedBet } from "@/lib/bet-types";
-import type { User } from "@/lib/user-types";
 import { getAllManagersReferralOverview } from "@/lib/referral-store";
 import {
   adminGetAudit,
@@ -32,11 +28,6 @@ export default function AdminDashboardPage() {
     platformBalance: 0,
     netPosition: 0,
   });
-  const [demo, setDemo] = useState<{
-    user: User;
-    bet: PlacedBet;
-    created: boolean;
-  } | null>(null);
   const [ledger, setLedger] = useState<{ id: string; description: string; amount: number }[]>([]);
   const [audit, setAudit] = useState<{ id: string; action: string; detail: string; bookingCode?: string }[]>([]);
   const [referralSummary, setReferralSummary] = useState({
@@ -47,7 +38,6 @@ export default function AdminDashboardPage() {
 
   const reload = useCallback(async () => {
     if (backendMode) {
-      setDemo(null);
       const [remoteStats, remoteLedger, remoteAudit, remoteRefs] = await Promise.all([
         adminGetStats(),
         adminGetLedger(),
@@ -85,7 +75,6 @@ export default function AdminDashboardPage() {
       return;
     }
 
-    setDemo(seedUser1DemoSlip());
     const users = getAllUsers();
     const bets = getAllBets();
     const userLiabilities = users.reduce((s, u) => s + u.balance, 0);
@@ -121,8 +110,6 @@ export default function AdminDashboardPage() {
           <h1 className="page-title">Dashboard</h1>
           <p className="text-xs text-muted">Platform overview</p>
         </div>
-
-        {!backendMode && <DemoSeedPanel demo={demo} onReload={() => void reload()} />}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[

@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PasswordField } from "@/components/auth/PasswordField";
+import { PhoneCountryInput } from "@/components/auth/PhoneCountryInput";
 import { useAuth } from "@/lib/auth-context";
 import { deferEffect } from "@/lib/defer-effect";
 import {
   findManagerByReferralCode,
   getPendingReferralCode,
+  setPendingReferralCode,
 } from "@/lib/referral-store";
 
 export function AuthModal() {
@@ -66,10 +69,15 @@ function LoginForm({
   onSubmit,
   onSwitch,
 }: {
-  onSubmit: (identifier: string, password: string) => Promise<string | null>;
+  onSubmit: (
+    phoneCountry: string,
+    phone: string,
+    password: string,
+  ) => Promise<string | null>;
   onSwitch: () => void;
 }) {
-  const [identifier, setIdentifier] = useState("");
+  const [phoneCountry, setPhoneCountry] = useState("GH");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -77,7 +85,7 @@ function LoginForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    const result = await onSubmit(identifier, password);
+    const result = await onSubmit(phoneCountry, phone, password);
     setError(result ?? "");
     setSubmitting(false);
   }
@@ -86,22 +94,18 @@ function LoginForm({
     <form onSubmit={handleSubmit} className="space-y-4 p-6 pt-8">
       <div>
         <h2 id="auth-modal-title" className="text-xl font-bold">Log In</h2>
-        <p className="mt-1 text-sm text-muted">Welcome back to BetPlus</p>
+        <p className="mt-1 text-sm text-muted">Sign in with your mobile number</p>
       </div>
 
-      <Field
-        label="Email or phone"
-        name="username"
-        autoComplete="username"
-        value={identifier}
-        onChange={setIdentifier}
-        placeholder="you@email.com or 08012345678"
-        required
+      <PhoneCountryInput
+        countryId={phoneCountry}
+        onCountryChange={setPhoneCountry}
+        phone={phone}
+        onPhoneChange={setPhone}
       />
-      <Field
+      <PasswordField
         label="Password"
         name="password"
-        type="password"
         autoComplete="current-password"
         value={password}
         onChange={setPassword}
@@ -137,21 +141,32 @@ function RegisterForm({
     name: string;
     email: string;
     phone: string;
+    phoneCountry: string;
     password: string;
+    referralCode?: string;
   }) => Promise<string | null>;
   onSwitch: () => void;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phoneCountry, setPhoneCountry] = useState("GH");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [referrerName, setReferrerName] = useState<string | null>(null);
 
   useEffect(() => {
     return deferEffect(() => {
-      const code = getPendingReferralCode();
+      const pending = getPendingReferralCode();
+      if (pending) setReferralCode(pending);
+    });
+  }, []);
+
+  useEffect(() => {
+    return deferEffect(() => {
+      const code = referralCode.trim();
       if (!code) {
         setReferrerName(null);
         return;
@@ -159,7 +174,13 @@ function RegisterForm({
       const manager = findManagerByReferralCode(code);
       setReferrerName(manager?.name ?? null);
     });
-  }, []);
+  }, [referralCode]);
+
+  function handleReferralCodeChange(value: string) {
+    const next = value.toUpperCase();
+    setReferralCode(next);
+    if (next.trim()) setPendingReferralCode(next);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -167,8 +188,10 @@ function RegisterForm({
     const result = await onSubmit({
       name: name.trim(),
       email: email.trim(),
-      phone: phone.trim(),
+      phone,
+      phoneCountry,
       password,
+      referralCode: referralCode.trim() || undefined,
     });
     setError(result ?? "");
     setSubmitting(false);
@@ -178,14 +201,30 @@ function RegisterForm({
     <form onSubmit={handleSubmit} className="space-y-4 p-6 pt-8">
       <div>
         <h2 id="auth-modal-title" className="text-xl font-bold">Create Account</h2>
-        <p className="mt-1 text-sm text-muted">Join BetPlus — get GH₵50 welcome balance</p>
+        <p className="mt-1 text-sm text-muted">
+          Register with your details — you will log in with phone and password only
+        </p>
         {referrerName && (
           <p className="mt-2 rounded-md bg-brand-light px-3 py-2 text-xs text-brand-dark">
             Referred by <strong>{referrerName}</strong>. Your account will be
-            linked to their invitation.
+            linked to their invitation only.
+          </p>
+        )}
+        {referralCode.trim() && !referrerName && (
+          <p className="mt-2 rounded-md bg-live-soft px-3 py-2 text-xs text-live">
+            Referral code not recognized. Check the code from your manager.
           </p>
         )}
       </div>
+
+      <Field
+        label="Referral code (optional)"
+        name="referralCode"
+        value={referralCode}
+        onChange={handleReferralCodeChange}
+        placeholder="Enter manager code e.g. JOHN1A2B"
+        autoComplete="off"
+      />
 
       <Field
         label="Full name"
@@ -206,26 +245,19 @@ function RegisterForm({
         placeholder="you@email.com"
         required
       />
-      <Field
-        label="Phone"
-        name="phone"
-        type="tel"
-        autoComplete="tel"
-        value={phone}
-        onChange={setPhone}
-        placeholder="08012345678"
-        required
+      <PhoneCountryInput
+        countryId={phoneCountry}
+        onCountryChange={setPhoneCountry}
+        phone={phone}
+        onPhoneChange={setPhone}
       />
-      <Field
+      <PasswordField
         label="Password"
         name="password"
-        type="password"
         autoComplete="new-password"
         value={password}
         onChange={setPassword}
-        placeholder="Min. 6 characters"
-        minLength={6}
-        maxLength={256}
+        placeholder="Choose a password"
         required
       />
 
@@ -258,8 +290,6 @@ function Field({
   type = "text",
   placeholder,
   required,
-  minLength,
-  maxLength,
   autoComplete,
 }: {
   label: string;
@@ -269,8 +299,6 @@ function Field({
   type?: string;
   placeholder?: string;
   required?: boolean;
-  minLength?: number;
-  maxLength?: number;
   autoComplete?: string;
 }) {
   return (
@@ -284,8 +312,6 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         required={required}
-        minLength={minLength}
-        maxLength={maxLength}
         className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2.5 text-sm outline-none focus:border-brand"
       />
     </label>

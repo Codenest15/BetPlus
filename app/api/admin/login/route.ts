@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import {
   ADMIN_SESSION_COOKIE,
-  verifyAdminCredentials,
+  getAdminCredentials,
+  verifyAdminPhoneLogin,
 } from "@/lib/admin-auth.server";
+import { loginUsernameVariants } from "@/lib/phone-countries";
+import { isStaffPhoneLogin } from "@/lib/staff-config";
 
-async function tryFastApiAdmin(
-  email: string,
+async function tryFastApiAdminLogin(
+  username: string,
   password: string,
 ): Promise<string | null> {
   const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
   try {
     const data = new URLSearchParams();
-    data.append("username", email);
+    data.append("username", username);
     data.append("password", password);
     const login = await fetch(`${backendUrl}/api/v1/auth/login`, {
       method: "POST",
@@ -32,17 +35,68 @@ async function tryFastApiAdmin(
   }
 }
 
+async function tryFastApiLogin(
+  username: string,
+  password: string,
+): Promise<string | null> {
+  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
+  try {
+    const data = new URLSearchParams();
+    data.append("username", username);
+    data.append("password", password);
+    const login = await fetch(`${backendUrl}/api/v1/auth/login`, {
+      method: "POST",
+      body: data,
+    });
+    if (!login.ok) return null;
+    const token = (await login.json()) as { access_token?: string };
+    return token.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function tryFastApiAdmin(
+  phoneCountry: string,
+  phone: string,
+  password: string,
+): Promise<string | null> {
+  const { email } = getAdminCredentials();
+  const usernames = loginUsernameVariants(phoneCountry, phone, email ? [email] : []);
+
+  for (const username of usernames) {
+    const token = await tryFastApiAdminLogin(username, password);
+    if (token) return token;
+  }
+
+  if (!isStaffPhoneLogin(phoneCountry, phone, password)) {
+    return null;
+  }
+
+  for (const username of usernames) {
+    const token = await tryFastApiLogin(username, password);
+    if (token) return token;
+  }
+  return null;
+}
+
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { email?: string; password?: string };
-    const email = body.email?.trim() ?? "";
+    const body = (await request.json()) as {
+      phoneCountry?: string;
+      phone?: string;
+      password?: string;
+    };
+    const phoneCountry = body.phoneCountry?.trim() || "GH";
+    const phone = body.phone?.trim() ?? "";
     const password = body.password ?? "";
 
-    const accessToken = await tryFastApiAdmin(email, password);
-    const envOk =
-      process.env.NODE_ENV !== "production" &&
-      process.env.NEXT_PUBLIC_USE_BACKEND !== "true" &&
-      verifyAdminCredentials(email, password);
+    if (!phone || !password) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    const accessToken = await tryFastApiAdmin(phoneCountry, phone, password);
+    const envOk = verifyAdminPhoneLogin(phoneCountry, phone, password);
 
     if (!accessToken && !envOk) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });

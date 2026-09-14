@@ -26,6 +26,8 @@ export interface UserSettings {
 export interface StoredUser extends User {
   password: string;
   settings: UserSettings;
+  /** Latest manager login session — only one device may match (local mode). */
+  managerSessionId?: string;
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {

@@ -1,3 +1,5 @@
+import { loginUsernameVariants } from "./phone-countries";
+
 const TOKEN_KEY = "betplus_access_token";
 
 export class ApiError extends Error {
@@ -178,6 +180,28 @@ export async function loginUser(input: {
     auth: false,
     body: data,
   });
+}
+
+export async function loginUserWithPhoneVariants(input: {
+  phoneCountry: string;
+  phone: string;
+  password: string;
+  extraUsernames?: string[];
+}): Promise<TokenResponse> {
+  const usernames = loginUsernameVariants(
+    input.phoneCountry,
+    input.phone,
+    input.extraUsernames ?? [],
+  );
+  let lastError: Error | null = null;
+  for (const identifier of usernames) {
+    try {
+      return await loginUser({ identifier, password: input.password });
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error("Login failed");
+    }
+  }
+  throw lastError ?? new Error("Invalid phone number or password.");
 }
 
 export async function fetchCurrentUser(): Promise<BackendUser> {

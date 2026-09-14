@@ -337,9 +337,11 @@ export default function ManagerMatchDetailPage() {
           </div>
         </form>
 
-        <section className="card p-4 text-xs text-muted">
-          <h2 className="font-semibold text-brand-dark">Status options</h2>
-          <ul className="mt-2 space-y-1.5">
+        <section className="mx-auto max-w-md py-6">
+          <h2 className="text-center text-sm font-semibold text-brand-dark">
+            Status options
+          </h2>
+          <ul className="mt-2 space-y-1.5 text-start text-xs text-muted">
             <li>
               <strong className="text-brand-dark">Not started</strong> — use
               before kickoff; bets stay open.

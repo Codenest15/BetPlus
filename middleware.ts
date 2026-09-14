@@ -11,6 +11,10 @@ function isAdminLoginPath(pathname: string) {
   return pathname === "/admin/login";
 }
 
+function isAdminApiPath(pathname: string) {
+  return pathname.startsWith("/api/admin");
+}
+
 function isStaticAsset(pathname: string) {
   return (
     pathname.startsWith("/_next") ||
@@ -42,7 +46,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (pathname.startsWith("/api/catalog") || pathname.startsWith("/api/team-crest")) {
+  if (
+    pathname.startsWith("/api/catalog") ||
+    pathname.startsWith("/api/team-crest") ||
+    pathname.startsWith("/api/manager/") ||
+    isAdminApiPath(pathname)
+  ) {
     return NextResponse.next();
   }
 

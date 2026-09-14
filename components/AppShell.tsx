@@ -57,10 +57,20 @@ function DefaultShell({ children }: { children: React.ReactNode }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAdminRoute = pathname?.startsWith("/admin");
+  const isManagerRoute = pathname?.startsWith("/manager");
   const isTicketPage = pathname?.startsWith("/bet/");
 
   if (isAdminRoute) {
     return <>{children}</>;
+  }
+
+  if (isManagerRoute) {
+    return (
+      <AuthProvider>
+        <AuthModal />
+        {children}
+      </AuthProvider>
+    );
   }
 
   return (

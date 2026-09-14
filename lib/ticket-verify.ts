@@ -96,7 +96,6 @@ export function buildTicketVerification(bet: PlacedBet): TicketVerification {
     dateStyle: "medium",
     timeStyle: "short",
   });
-
   return {
     bet,
     ticketId: ticketId(bet),

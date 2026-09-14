@@ -47,6 +47,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 export function TicketSummary({ bet, onBetUpdate }: TicketSummaryProps) {
   const { canManage } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
+  const canEdit = canManage && !!onBetUpdate;
   const isWon = bet.status === "won";
   const isLost = bet.status === "lost";
   const isOpen = bet.status === "open";
@@ -56,6 +57,9 @@ export function TicketSummary({ bet, onBetUpdate }: TicketSummaryProps) {
   const showFreeBetGift = betUsedFreeBet(bet);
   const showAfterVoid = betHasVoidLeg(bet) && !isOpen;
   const showBonus = bonus > 0;
+  const totalOddsLabel = showAfterVoid
+    ? formatOdds(originalTicketOdds(bet))
+    : formatOdds(bet.totalOdds);
 
   const placedLabel = new Date(bet.placedAt)
     .toLocaleString("en-GB", {
@@ -67,67 +71,75 @@ export function TicketSummary({ bet, onBetUpdate }: TicketSummaryProps) {
     })
     .replace(",", "");
 
+  const summaryBody = (
+    <>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+        <p className="text-[11px] text-white/55">Ticket ID: {ticketId(bet)}</p>
+        <p className="text-right text-[11px] text-white/55">{placedLabel}</p>
+
+        <p className="text-base font-bold text-[#f5c842]">{betTypeLabel(bet)}</p>
+        <div aria-hidden className="min-h-[1.5rem]" />
+
+        <p className="self-center text-base font-bold text-white">{returnLabel}</p>
+        <div className="flex items-center justify-end gap-1.5 self-center">
+          {isWon && <TrophyBadge />}
+          <span
+            className={`text-sm font-bold ${isWon ? "text-accent" : isLost ? "text-live" : "text-amber-300"}`}
+          >
+            {statusHeadline(bet.status)}
+          </span>
+          <span
+            className={`text-2xl font-bold leading-none tabular-nums ${
+              isWon ? "text-accent" : isLost ? "text-live" : "text-white"
+            }`}
+          >
+            {formatAmountPlain(displayReturn)}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+        <SummaryRow label="Total Stake" value={formatAmountPlain(bet.stake)} />
+        {showFreeBetGift && (
+          <SummaryRow label="Free Bet Gift" value={`-${formatAmountPlain(bet.stake)}`} />
+        )}
+        <SummaryRow label="Total Odds" value={totalOddsLabel} />
+        {showBonus && (
+          <SummaryRow label="Total Bonus" value={formatAmountPlain(bonus)} />
+        )}
+        {showAfterVoid && (
+          <SummaryRow
+            label="Total Odds (After Void)"
+            value={formatOdds(totalOddsAfterVoid(bet))}
+          />
+        )}
+      </div>
+    </>
+  );
+
   return (
     <>
       <section className="bg-brand text-white">
-        <button
-          type="button"
-          onClick={() => {
-            if (canManage) setEditOpen(true);
-          }}
-          className={`w-full px-3 py-3 text-left ${canManage ? "cursor-pointer active:bg-white/5" : "cursor-default"}`}
-          aria-label={canManage ? "Edit ticket summary" : undefined}
-        >
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-          <p className="text-[11px] text-white/55">Ticket ID: {ticketId(bet)}</p>
-          <p className="text-right text-[11px] text-white/55">{placedLabel}</p>
-
-          <p className="text-base font-bold text-[#f5c842]">{betTypeLabel(bet)}</p>
-          <div aria-hidden className="min-h-[1.5rem]" />
-
-          <p className="self-center text-base font-bold text-white">{returnLabel}</p>
-          <div className="flex items-center justify-end gap-1.5 self-center">
-            {isWon && <TrophyBadge />}
-            <span
-              className={`text-sm font-bold ${isWon ? "text-accent" : isLost ? "text-live" : "text-amber-300"}`}
-            >
-              {statusHeadline(bet.status)}
-            </span>
-            <span
-              className={`text-2xl font-bold leading-none tabular-nums ${
-                isWon ? "text-accent" : isLost ? "text-live" : "text-white"
-              }`}
-            >
-              {formatAmountPlain(displayReturn)}
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
-          <SummaryRow label="Total Stake" value={formatAmountPlain(bet.stake)} />
-          {showFreeBetGift && (
-            <SummaryRow label="Free Bet Gift" value={`-${formatAmountPlain(bet.stake)}`} />
-          )}
-          <SummaryRow label="Total Odds" value={formatOdds(originalTicketOdds(bet))} />
-          {showBonus && (
-            <SummaryRow label="Total Bonus" value={formatAmountPlain(bonus)} />
-          )}
-          {showAfterVoid && (
-            <SummaryRow
-              label="Total Odds (After Void)"
-              value={formatOdds(totalOddsAfterVoid(bet))}
-            />
-          )}
-        </div>
-      </button>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="w-full px-3 py-3 text-left cursor-pointer active:bg-white/5"
+            aria-label="Edit ticket summary"
+          >
+            {summaryBody}
+          </button>
+        ) : (
+          <div className="w-full px-3 py-3">{summaryBody}</div>
+        )}
       </section>
 
-      {canManage && onBetUpdate && (
+      {canEdit && (
         <ManagerEditPopup open={editOpen} onClose={() => setEditOpen(false)}>
           <ManagerTicketEditPanel
             bet={bet}
             onSaved={(updated) => {
-              onBetUpdate(updated);
+              onBetUpdate?.(updated);
               setEditOpen(false);
             }}
             onClose={() => setEditOpen(false)}

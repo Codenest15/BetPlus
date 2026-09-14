@@ -3,23 +3,22 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { BetStatus, PlacedBet } from "@/lib/bet-types";
-import { isLegPastFullTime } from "@/lib/bet-edit-rules";
+import { getLegKickoffDate, isLegPastFullTime } from "@/lib/bet-edit-rules";
+import { getManagerMatchStatus } from "@/lib/manager-matches-store";
 import { evaluateLegAtFt, ftScoreLabel } from "@/lib/bet-settlement";
 import { formatFtScore, getMatchFtScore } from "@/lib/match-results";
 import {
+  betTypeLabel,
   getLegDisplays,
   listDisplayReturn,
   listReturnLabel,
+  openBetSlipRevision,
   type TicketLegDisplay,
 } from "@/lib/ticket-display";
 import { formatMoney, formatOdds } from "@/lib/utils";
 
 function isSettled(status: BetStatus) {
   return status !== "open";
-}
-
-function betTypeLabel(bet: PlacedBet) {
-  return bet.selections.length > 1 ? "Multiple" : "Single";
 }
 
 function statusLabel(status: BetStatus) {
@@ -125,6 +124,23 @@ function legConnectorClass(won: boolean, lost: boolean, finished: boolean) {
   return "bg-brand-soft";
 }
 
+function openLegMatchStatusLabel(
+  bet: PlacedBet,
+  legIndex: number,
+  finished: boolean,
+): string | null {
+  if (finished) return null;
+
+  const matchId = bet.selections[legIndex]?.matchId;
+  const managerStatus = matchId ? getManagerMatchStatus(matchId) : null;
+  if (managerStatus === "not_started") return "Not Started";
+
+  const kickoff = getLegKickoffDate(bet, legIndex).getTime();
+  if (Date.now() < kickoff) return "Not Started";
+  if (!isLegPastFullTime(bet, legIndex)) return "Live";
+  return null;
+}
+
 function resolveOpenBetLeg(
   bet: PlacedBet,
   legIndex: number,
@@ -205,6 +221,7 @@ function OpenBetLegRow({
   const won = leg.legWon === true;
   const lost = leg.legWon === false;
   const finished = leg.finished;
+  const matchStatus = openLegMatchStatusLabel(bet, legIndex, finished);
   const connector = legConnectorClass(won, lost, finished);
   const timelineX = "calc(0.875rem + 14px)"; /* px-3.5 + half icon */
 
@@ -274,6 +291,15 @@ function OpenBetLegRow({
             voidLeg={leg.voidLeg}
           />
         ) : null}
+        {matchStatus ? (
+          <p
+            className={`mt-1 text-[11px] font-semibold ${
+              matchStatus === "Live" ? "text-live" : "text-muted"
+            }`}
+          >
+            {matchStatus}
+          </p>
+        ) : null}
         <p className="mt-1 text-[11px] text-muted">{kickoffShort}</p>
       </div>
     </div>
@@ -283,11 +309,12 @@ function OpenBetLegRow({
 
 function OpenBetLegsList({ bet }: { bet: PlacedBet }) {
   const legs = getLegDisplays(bet);
+  const revision = openBetSlipRevision(bet);
   return (
     <div className="relative bg-white">
       {legs.map((leg, i) => (
         <OpenBetLegRow
-          key={`${leg.selection.id}-${i}`}
+          key={`${bet.id}-${i}-${revision}`}
           bet={bet}
           legIndex={i}
           leg={leg}
@@ -300,6 +327,7 @@ function OpenBetLegsList({ bet }: { bet: PlacedBet }) {
 
 function OpenBetCard({ bet }: { bet: PlacedBet }) {
   const [expanded, setExpanded] = useState(false);
+  const slipRevision = openBetSlipRevision(bet);
   const first = bet.selections[0];
   const extra = bet.selections.length - 1;
   const stakeText = formatMoney(bet.stake).replace("GH₵", "").trim();
@@ -326,11 +354,17 @@ function OpenBetCard({ bet }: { bet: PlacedBet }) {
         </div>
 
         {expanded ? (
-          <OpenBetLegsList bet={bet} />
+          <OpenBetLegsList key={slipRevision} bet={bet} />
         ) : (
           first && (
             <div className="border-b border-border/60 px-3.5 py-3">
-              <p className="text-[13px] leading-snug text-foreground">
+              <p className="text-[13px] font-bold leading-snug text-foreground">
+                {first.selectionLabel} @ {formatOdds(first.odds)}
+              </p>
+              <p className="mt-1 text-[12px] leading-snug text-muted">
+                {first.marketName ?? "1X2"}
+              </p>
+              <p className="mt-1 text-[13px] leading-snug text-foreground">
                 <span className="font-semibold">
                   {first.homeTeam} v {first.awayTeam}
                 </span>

@@ -29,7 +29,7 @@ In backend mode, authentication, wallet, bets, settlement, admin, manager, refer
 npm run dev:admin
 ```
 
-Uses `ADMIN_ONLY=true`. Sign in with a FastAPI admin user (`admin@betplus.com` / `admin123` when demo seed is enabled) or the `ADMIN_EMAIL` / `ADMIN_PASSWORD` env fallback.
+Uses `ADMIN_ONLY=true`. Sign in with your FastAPI admin user (e.g. database account with `is_admin`) or set `ADMIN_EMAIL` / `ADMIN_PASSWORD` in env as fallback.
 
 ## Scripts
 

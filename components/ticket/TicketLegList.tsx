@@ -240,43 +240,66 @@ export function TicketLegItem({
               </p>
             ) : null}
 
-            <button
-              type="button"
-              onClick={() => {
-                if (canEdit) setEditOpen(true);
-              }}
-              className={`mt-2 w-full space-y-0.5 rounded-md text-left text-xs sm:text-[13px] ${
-                canEdit
-                  ? "cursor-pointer ring-brand/0 transition hover:bg-white/40 active:bg-white/50"
-                  : "cursor-default"
-              }`}
-              aria-label={canEdit ? "Edit leg pick, market, outcome and odds" : undefined}
-            >
-              <p className="flex flex-wrap items-center gap-1 text-foreground">
-                <span className="text-muted">Pick:</span>
-                <span className="font-bold">
-                  {pickLabel} @ {pickOdds}
-                </span>
-                {won && (
-                  <svg className="h-3.5 w-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-                {lost && (
-                  <svg className="h-3.5 w-3.5 text-live" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                )}
-              </p>
-              <p>
-                <span className="text-muted">Market:</span>{" "}
-                <span className="font-medium text-foreground">{marketName}</span>
-              </p>
-              <p>
-                <span className="text-muted">Outcome:</span>{" "}
-                <span className="font-medium text-foreground">{outcomeLabel}</span>
-              </p>
-            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                className="mt-2 w-full space-y-0.5 rounded-md text-left text-xs ring-brand/0 transition hover:bg-white/40 active:bg-white/50 sm:text-[13px]"
+                aria-label="Edit leg pick, market, outcome and odds"
+              >
+                <p className="flex flex-wrap items-center gap-1 text-foreground">
+                  <span className="text-muted">Pick:</span>
+                  <span className="font-bold">
+                    {pickLabel} @ {pickOdds}
+                  </span>
+                  {won && (
+                    <svg className="h-3.5 w-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {lost && (
+                    <svg className="h-3.5 w-3.5 text-live" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </p>
+                <p>
+                  <span className="text-muted">Market:</span>{" "}
+                  <span className="font-medium text-foreground">{marketName}</span>
+                </p>
+                <p>
+                  <span className="text-muted">Outcome:</span>{" "}
+                  <span className="font-medium text-foreground">{outcomeLabel}</span>
+                </p>
+              </button>
+            ) : (
+              <div className="mt-2 w-full space-y-0.5 text-left text-xs sm:text-[13px]">
+                <p className="flex flex-wrap items-center gap-1 text-foreground">
+                  <span className="text-muted">Pick:</span>
+                  <span className="font-bold">
+                    {pickLabel} @ {pickOdds}
+                  </span>
+                  {won && (
+                    <svg className="h-3.5 w-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {lost && (
+                    <svg className="h-3.5 w-3.5 text-live" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </p>
+                <p>
+                  <span className="text-muted">Market:</span>{" "}
+                  <span className="font-medium text-foreground">{marketName}</span>
+                </p>
+                <p>
+                  <span className="text-muted">Outcome:</span>{" "}
+                  <span className="font-medium text-foreground">{outcomeLabel}</span>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </li>

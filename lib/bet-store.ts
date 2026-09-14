@@ -110,10 +110,13 @@ export function placeBet(input: {
     selections: input.selections,
     originalSelections: cloneSelections(input.selections),
     stake: input.stake,
+    originalStake: input.stake,
     totalOdds: input.totalOdds,
     originalTotalOdds: input.totalOdds,
     potentialWin: input.potentialWin,
+    originalPotentialWin: input.potentialWin,
     bonus,
+    originalBonus: bonus,
     usedFreeBet: input.usedFreeBet === true ? true : undefined,
     flexCut:
       input.flexCut != null && input.flexCut > 0 ? input.flexCut : undefined,
@@ -271,7 +274,6 @@ export function reconcileBetsForMatch(matchId: string): void {
 }
 
 export function getBetsByUser(userId: string): PlacedBet[] {
-  ensureDemoHistoryBets(userId);
   const bets = readBets();
   const result: PlacedBet[] = [];
 
@@ -345,9 +347,42 @@ export function adminUpdateBet(
   const bets = readBets();
   const idx = bets.findIndex((b) => b.id === betId);
   if (idx === -1) return null;
-  // Original record is never overwritten — only live ticket fields may change.
-  bets[idx] = { ...bets[idx], ...updates };
+  const prev = bets[idx];
+  const next: PlacedBet = { ...prev, ...updates };
+
+  if (!prev.originalSelections?.length && updates.selections) {
+    next.originalSelections = cloneSelections(prev.selections);
+    if (prev.originalStake == null) next.originalStake = prev.stake;
+    if (prev.originalTotalOdds == null) next.originalTotalOdds = prev.totalOdds;
+    if (prev.originalPotentialWin == null) {
+      next.originalPotentialWin = prev.potentialWin;
+    }
+    if (prev.originalBonus == null) next.originalBonus = prev.bonus;
+  }
+  if (updates.stake != null && prev.originalStake == null) {
+    next.originalStake = prev.stake;
+  }
+  if (updates.totalOdds != null && prev.originalTotalOdds == null) {
+    next.originalTotalOdds = prev.totalOdds;
+  }
+  if (updates.potentialWin != null && prev.originalPotentialWin == null) {
+    next.originalPotentialWin = prev.potentialWin;
+  }
+  if (updates.bonus != null && prev.originalBonus == null) {
+    next.originalBonus = prev.bonus;
+  }
+
+  const slipChanged =
+    updates.selections !== undefined ||
+    updates.stake !== undefined ||
+    updates.totalOdds !== undefined ||
+    updates.potentialWin !== undefined ||
+    updates.bonus !== undefined ||
+    updates.legResults !== undefined;
+
+  bets[idx] = next;
   writeBets(bets);
+  if (slipChanged) emitBetsUpdated();
   return bets[idx];
 }
 
