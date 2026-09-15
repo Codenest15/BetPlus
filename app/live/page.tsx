@@ -13,18 +13,26 @@ export default function LivePage() {
 
   useEffect(() => {
     let cancelled = false;
-    getMatchesForPage({ live: true })
-      .then((data) => {
-        if (!cancelled) setLiveMatches(data.filter((m) => m.isLive));
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load live matches");
-      })
-      .finally(() => {
+    async function load() {
+      try {
+        const data = await getMatchesForPage({ live: true });
+        if (!cancelled) {
+          setLiveMatches(data.filter((m) => m.isLive));
+          setError("");
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load live matches");
+        }
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    }
+    void load();
+    const refresh = window.setInterval(() => void load(), 30_000);
     return () => {
       cancelled = true;
+      window.clearInterval(refresh);
     };
   }, []);
 

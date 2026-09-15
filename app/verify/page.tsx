@@ -63,7 +63,7 @@ export default function VerifyPage() {
       return;
     }
 
-    if (mode === "slip") {
+    if (mode === "slip" && !backendMode) {
       const result = resolveBookingCode(normalized);
       if (!result) {
         setError("Code not found. Check and try again.");

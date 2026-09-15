@@ -11,6 +11,7 @@ import {
   ApiError,
   initiateDeposit,
   initiateWithdrawal,
+  getPaymentStatus,
   getTransactions as apiGetTransactions,
   useBackendApi,
 } from "@/lib/backend-client";
@@ -39,6 +40,25 @@ import { deferEffect } from "@/lib/defer-effect";
 
 const DEPOSIT_AMOUNTS = [20, 50, 100, 200, 500];
 const WITHDRAW_AMOUNTS = [20, 50, 100, 200];
+const PAYMENT_POLL_MS = 3000;
+const PAYMENT_POLL_ATTEMPTS = 20;
+
+async function waitForPaymentStatus(
+  reference: string,
+): Promise<Awaited<ReturnType<typeof getPaymentStatus>>> {
+  let latest = await getPaymentStatus(reference);
+  for (let attempt = 0; attempt < PAYMENT_POLL_ATTEMPTS; attempt += 1) {
+    if (
+      latest.status !== "pending" &&
+      latest.status !== "processing"
+    ) {
+      return latest;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, PAYMENT_POLL_MS));
+    latest = await getPaymentStatus(reference);
+  }
+  return latest;
+}
 
 function PaymentMethodIcon({
   src,
@@ -170,14 +190,41 @@ export default function WalletPage() {
     if (backendMode) {
       setSubmitting(true);
       try {
-        const payment = await initiateDeposit(amount, "mobile_money");
+        if (depositMethod !== "mobile-money") {
+          setError(
+            "The configured payment provider currently supports mobile money deposits only.",
+          );
+          return false;
+        }
+        const payment = await initiateDeposit(
+          amount,
+          mobileNetwork,
+          phone,
+          crypto.randomUUID(),
+        );
         if (payment.authorization_url) {
           window.location.href = payment.authorization_url;
           return true;
         }
         if (payment.status !== "completed") {
-          setError("Payment is pending confirmation");
-          return false;
+          setMessage("Check your phone and approve the payment");
+          const latest = await waitForPaymentStatus(payment.provider_ref);
+          if (latest.status === "failed" || latest.status === "cancelled" || latest.status === "expired") {
+            setError(`Deposit ${formatMoney(amount)} ${latest.status}`);
+            setMessage("");
+            return false;
+          }
+          if (latest.status !== "completed") {
+            setMessage(
+              `Deposit ${formatMoney(amount)} is pending. Approve the prompt on your phone; your balance updates after confirmation.`,
+            );
+            return true;
+          }
+          await refreshUser();
+          await loadTransactions();
+          setCryptoStep(false);
+          setMessage(`Deposited ${formatMoney(amount)} successfully`);
+          return true;
         }
         await refreshUser();
         await loadTransactions();
@@ -299,10 +346,43 @@ export default function WalletPage() {
     if (backendMode) {
       setSubmitting(true);
       try {
-        await initiateWithdrawal(amount, "mobile_money", description);
+        if (withdrawMethod !== "mobile-money") {
+          setError(
+            "The configured payment provider currently supports mobile money withdrawals only.",
+          );
+          return;
+        }
+        const payment = await initiateWithdrawal(
+          amount,
+          mobileNetwork,
+          phone,
+          phone,
+          crypto.randomUUID(),
+        );
         await refreshUser();
         await loadTransactions();
-        setMessage(`Withdrawal of ${formatMoney(amount)} submitted`);
+        if (payment.status === "pending" || payment.status === "processing") {
+          setMessage("Withdrawal submitted. Waiting for confirmation.");
+          const latest = await waitForPaymentStatus(payment.provider_ref);
+          await refreshUser();
+          await loadTransactions();
+          if (latest.status === "failed" || latest.status === "reversed") {
+            setError(`Withdrawal ${formatMoney(amount)} ${latest.status}`);
+            setMessage("");
+            return;
+          }
+          setMessage(
+            latest.status === "completed"
+              ? `Withdrawal of ${formatMoney(amount)} completed`
+              : `Withdrawal of ${formatMoney(amount)} is pending confirmation`,
+          );
+          return;
+        }
+        setMessage(
+          payment.status === "completed"
+            ? `Withdrawal of ${formatMoney(amount)} completed`
+            : `Withdrawal of ${formatMoney(amount)} is pending confirmation`,
+        );
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Withdrawal failed");
       } finally {
@@ -323,7 +403,9 @@ export default function WalletPage() {
     setMessage(`Withdrawal of ${formatMoney(amount)} submitted`);
   }
 
-  const methods = tab === "deposit" ? DEPOSIT_METHODS : WITHDRAW_METHODS;
+  const methods = (tab === "deposit" ? DEPOSIT_METHODS : WITHDRAW_METHODS).filter(
+    (method) => !backendMode || method.id === "mobile-money",
+  );
 
   return (
     <div className="space-y-4">

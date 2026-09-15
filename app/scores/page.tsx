@@ -13,18 +13,26 @@ export default function ScoresPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getMatchesForPage()
-      .then((data) => {
-        if (!cancelled) setMatches(data);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load scores");
-      })
-      .finally(() => {
+    async function load() {
+      try {
+        const data = await getMatchesForPage();
+        if (!cancelled) {
+          setMatches(data);
+          setError("");
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load scores");
+        }
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    }
+    void load();
+    const refresh = window.setInterval(() => void load(), 30_000);
     return () => {
       cancelled = true;
+      window.clearInterval(refresh);
     };
   }, []);
 

@@ -7,7 +7,12 @@ import {
   placeBetForUser,
   saveSharedSlipCode,
 } from "@/lib/bet-store";
-import { ApiError, placeBet as apiPlaceBet, useBackendApi } from "@/lib/backend-client";
+import {
+  ApiError,
+  placeBet as apiPlaceBet,
+  placeBetBatch as apiPlaceBetBatch,
+  useBackendApi,
+} from "@/lib/backend-client";
 import { backendBetToPlacedBet, localSelectionToBackend } from "@/lib/backend-mappers";
 import type { PlacedBet } from "@/lib/bet-types";
 import { formatMoney, formatOdds } from "@/lib/utils";
@@ -41,6 +46,7 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
     flexiEnabled,
     setFlexiEnabled,
     removeSelection,
+    updateSelectionOdds,
     clearSlip,
     totalOdds,
     totalStake,
@@ -53,6 +59,7 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
   const [placing, setPlacing] = useState(false);
   const [bookedCode, setBookedCode] = useState<string | null>(null);
   const [insureDismissed, setInsureDismissed] = useState(false);
+  const [oddsChangeAccepted, setOddsChangeAccepted] = useState(false);
 
   const isSheet = variant === "sheet";
   const ticketsTab = slipTab === "bet-history" ? "bet-history" : "open-bets";
@@ -100,31 +107,33 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
         let placedBet: PlacedBet;
 
         if (betType === "single" && activeSelections.length > 1) {
-          let lastBet: PlacedBet | null = null;
-          for (const sel of activeSelections) {
-            const remote = await apiPlaceBet({
+          const remoteBets = await apiPlaceBetBatch({
+            bets: activeSelections.map((sel) => ({
               stake,
               selections: [localSelectionToBackend(sel)],
-              idempotencyKey: crypto.randomUUID(),
-            });
-            lastBet = backendBetToPlacedBet(remote);
-          }
+            })),
+            acceptOddsChange: oddsChangeAccepted,
+            idempotencyKey: crypto.randomUUID(),
+          });
+          const lastBet = remoteBets.at(-1);
           if (!lastBet) {
             setError("Failed to place bet");
             return;
           }
-          placedBet = lastBet;
+          placedBet = backendBetToPlacedBet(lastBet);
         } else {
           const remote = await apiPlaceBet({
             stake: betType === "single" ? stake : totalStake,
             selections: activeSelections.map(localSelectionToBackend),
             flex_cut: flexiEnabled ? 1 : undefined,
+            acceptOddsChange: oddsChangeAccepted,
             idempotencyKey: crypto.randomUUID(),
           });
           placedBet = backendBetToPlacedBet(remote);
         }
 
         await refreshUser();
+        setOddsChangeAccepted(false);
         clearSlip();
         window.dispatchEvent(new CustomEvent("betplus:bets-updated"));
         if (onClose) onClose();
@@ -151,7 +160,25 @@ export function BetSlip({ variant = "sidebar", onClose }: BetSlipProps) {
       if (onClose) onClose();
       router.push(`/bet/${bet.bookingCode}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to place bet");
+      if (err instanceof ApiError) {
+        const body = err.body as {
+          detail?: { code?: string; selections?: Array<{ selection?: string; current_odds?: number }> };
+        } | undefined;
+        if (body?.detail?.code === "ODDS_CHANGED") {
+          for (const change of body.detail.selections ?? []) {
+            const matching = activeSelections.find(
+              (selection) => selection.selection === change.selection,
+            );
+            if (matching && typeof change.current_odds === "number") {
+              updateSelectionOdds(matching.id, change.current_odds);
+            }
+          }
+          setOddsChangeAccepted(true);
+        }
+        setError(err.message);
+      } else {
+        setError("Failed to place bet");
+      }
     } finally {
       setPlacing(false);
     }

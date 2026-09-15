@@ -13,6 +13,7 @@ import {
   changePassword as apiChangePassword,
   fetchCurrentUser,
   loginUser as apiLogin,
+  logoutUser as apiLogout,
   registerUser as apiRegister,
   setAccessToken,
   updateProfile as apiUpdateProfile,
@@ -164,8 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (identifier: string, password: string): Promise<string | null> => {
       if (backendMode) {
         try {
-          const token = await apiLogin({ identifier, password });
-          setAccessToken(token.access_token);
+          await apiLogin({ identifier, password });
+          setAccessToken(null);
           await refreshUser();
           setAuthModal(null);
           return null;
@@ -197,11 +198,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const referralCode = getPendingReferralCode() ?? undefined;
           await apiRegister({ ...input, referralCode });
           clearPendingReferralCode();
-          const token = await apiLogin({
+          await apiLogin({
             identifier: input.email,
             password: input.password,
           });
-          setAccessToken(token.access_token);
+          setAccessToken(null);
           await refreshUser();
           setAuthModal(null);
           return null;
@@ -226,6 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     if (backendMode) {
       setAccessToken(null);
+      void apiLogout().catch(() => undefined);
     } else {
       localLogout();
     }

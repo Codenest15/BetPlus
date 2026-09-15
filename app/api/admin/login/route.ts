@@ -48,10 +48,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    const response = NextResponse.json({
-      ok: true,
-      access_token: accessToken ?? null,
-    });
+    const response = NextResponse.json({ ok: true });
     response.cookies.set(ADMIN_SESSION_COOKIE, "1", {
       httpOnly: true,
       sameSite: "lax",
@@ -59,6 +56,15 @@ export async function POST(request: Request) {
       path: "/",
       maxAge: 60 * 60 * 8,
     });
+    if (accessToken) {
+      response.cookies.set("betplus_access_token", accessToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24,
+      });
+    }
     return response;
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });

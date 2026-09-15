@@ -82,10 +82,12 @@ export async function lookupTicketVerificationAsync(
         const byCode = await apiGetBetByCode(normalized);
         return backendBetToPlacedBet(byCode);
       } catch {
-        return findDemoBet(normalized);
+          return null;
       }
     }
   }
+
+  // Production/backend mode never synthesizes demo tickets after a backend miss.
 
   return lookupTicketVerification(normalized);
 }

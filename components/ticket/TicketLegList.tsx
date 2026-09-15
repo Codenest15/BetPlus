@@ -88,9 +88,13 @@ export function TicketLegItem({
   );
   const marketName = leg.selection.marketName ?? "1X2";
 
-  function handleSaved() {
-    const updated = getBetById(betId);
-    if (updated && onBetUpdate) onBetUpdate(updated);
+  function handleSaved(updated?: PlacedBet) {
+    if (updated && onBetUpdate) {
+      onBetUpdate(updated);
+      return;
+    }
+    const localUpdated = getBetById(betId);
+    if (localUpdated && onBetUpdate) onBetUpdate(localUpdated);
   }
 
   return (

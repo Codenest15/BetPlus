@@ -33,8 +33,7 @@ export async function adminLogin(email: string, password: string): Promise<boole
       body: JSON.stringify({ email, password }),
     });
     if (!res.ok) return false;
-    const data = (await res.json()) as { access_token?: string | null };
-    if (data.access_token) setAccessToken(data.access_token);
+    await res.json().catch(() => null);
     return true;
   } catch {
     return false;
