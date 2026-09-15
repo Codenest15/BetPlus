@@ -7,6 +7,7 @@ import {
   type LegOutcomeStatus,
 } from "@/lib/bet-store";
 import { managerUpdateLeg, useBackendApi } from "@/lib/backend-client";
+import { backendBetToPlacedBet } from "@/lib/backend-mappers";
 import { deferEffect } from "@/lib/defer-effect";
 import {
   buildLegMarketCatalog,
@@ -66,7 +67,7 @@ interface ManagerLegEditModalProps {
   ftScore?: string | null;
   betId: string;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (updated?: import("@/lib/bet-types").PlacedBet) => void;
 }
 
 function SegmentedRow<T extends string>({
@@ -413,7 +414,7 @@ export function ManagerLegEditModal({
     setSaving(true);
     try {
       if (backendMode) {
-        await managerUpdateLeg(betId, legIndex, {
+        const remote = await managerUpdateLeg(betId, legIndex, {
           selection: pickKey,
           selection_label: pick,
           odds: oddsNum,
@@ -424,6 +425,7 @@ export function ManagerLegEditModal({
           ft_home_score: ftH,
           ft_away_score: ftA,
         });
+        onSaved(backendBetToPlacedBet(remote));
       } else {
         const updated = managerUpdateBetLeg(betId, {
           legIndex,
@@ -445,8 +447,8 @@ export function ManagerLegEditModal({
           "Update bet leg",
           `${selection.homeTeam} vs ${selection.awayTeam} · ${selectedEntry.name} · ${pick} @ ${formatOdds(oddsNum)}${ftH != null && ftA != null ? ` · FT ${ftH}:${ftA}` : ""} · ${outcomeStatus}`,
         );
+        onSaved();
       }
-      onSaved();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update this leg.");

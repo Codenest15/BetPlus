@@ -12,8 +12,8 @@ import {
 import {
   changePassword as apiChangePassword,
   fetchCurrentUser,
-  getAccessToken,
-  loginUserWithPhoneVariants as apiLoginWithPhone,
+  loginUser as apiLogin,
+  logoutUser as apiLogout,
   registerUser as apiRegister,
   setAccessToken,
   updateProfile as apiUpdateProfile,
@@ -201,21 +201,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ): Promise<string | null> => {
       if (backendMode) {
         try {
-          const token = await apiLoginWithPhone({
-            phoneCountry,
-            phone,
-            password,
-          });
-          setAccessToken(token.access_token);
-          const remote = await fetchCurrentUser();
-          const nextUser = backendToUser(remote);
-          setUser(nextUser);
-          setSettings(settingsFromBackend(remote.settings, remote));
-          if (nextUser.isManager) {
-            await claimManagerSessionForUser(nextUser, token.access_token);
-          } else {
-            clearManagerDeviceSession();
-          }
+          await apiLogin({ identifier, password });
+          setAccessToken(null);
+          await refreshUser();
           setAuthModal(null);
           return null;
         } catch (err) {
@@ -257,13 +245,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             referralCode,
           });
           clearPendingReferralCode();
-          const token = await apiLoginWithPhone({
-            phoneCountry: input.phoneCountry,
-            phone: input.phone,
+          await apiLogin({
+            identifier: input.email,
             password: input.password,
             extraUsernames: [email],
           });
-          setAccessToken(token.access_token);
+          setAccessToken(null);
           await refreshUser();
           setAuthModal(null);
           return null;
@@ -293,6 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
       setAccessToken(null);
+      void apiLogout().catch(() => undefined);
     } else {
       localLogout();
     }

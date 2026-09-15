@@ -46,6 +46,7 @@ interface BetSlipContextValue {
   addSelection: (match: Match, selection: OddsSelection) => void;
   addMarketSelection: (match: Match, input: AddMarketInput) => void;
   removeSelection: (id: string) => void;
+  updateSelectionOdds: (id: string, odds: number) => void;
   clearSlip: () => void;
   toggleSelectionEnabled: (id: string) => void;
   isSelectionEnabled: (id: string) => boolean;
@@ -163,6 +164,14 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       next.delete(id);
       return next;
     });
+  }, []);
+
+  const updateSelectionOdds = useCallback((id: string, odds: number) => {
+    setSelections((prev) =>
+      prev.map((selection) =>
+        selection.id === id ? { ...selection, odds } : selection,
+      ),
+    );
   }, []);
 
   const clearSlip = useCallback(() => {
@@ -292,6 +301,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       addSelection,
       addMarketSelection,
       removeSelection,
+      updateSelectionOdds,
       clearSlip,
       toggleSelectionEnabled,
       isSelectionEnabled,
@@ -321,6 +331,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       addSelection,
       addMarketSelection,
       removeSelection,
+      updateSelectionOdds,
       clearSlip,
       toggleSelectionEnabled,
       isSelectionEnabled,

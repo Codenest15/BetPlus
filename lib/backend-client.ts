@@ -1,6 +1,4 @@
-import { loginUsernameVariants } from "./phone-countries";
-
-const TOKEN_KEY = "betplus_access_token";
+const LEGACY_TOKEN_KEY = "betplus_access_token";
 
 export class ApiError extends Error {
   constructor(
@@ -13,19 +11,24 @@ export class ApiError extends Error {
   }
 }
 
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+function clearLegacyAccessToken() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    sessionStorage.removeItem(LEGACY_TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
-export function setAccessToken(token: string | null) {
-  if (typeof window === "undefined") return;
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+/** Clears leftover browser token storage. HTTP-only cookies are the auth authority. */
+export function setAccessToken(_token?: string | null) {
+  void _token;
+  clearLegacyAccessToken();
 }
 
 export function getAccessToken(): string | null {
-  return getToken();
+  return null;
 }
 
 async function parseJson(resp: Response): Promise<unknown> {
@@ -52,6 +55,13 @@ export function formatApiErrorDetail(data: unknown, fallback: string): string {
   if (typeof data !== "object" || !data || !("detail" in data)) return fallback;
   const detail = (data as { detail: unknown }).detail;
   if (typeof detail === "string" && detail.trim()) return detail;
+  if (detail && typeof detail === "object" && "code" in detail) {
+    const code = String((detail as { code: unknown }).code);
+    if (code === "ODDS_CHANGED") {
+      return "Odds changed. Review the updated selections and place the bet again to accept them.";
+    }
+    return code;
+  }
   if (Array.isArray(detail)) {
     const parts = detail
       .map((item) => {
@@ -76,22 +86,24 @@ export async function apiRequest<T>(
   path: string,
   options: RequestInit & { auth?: boolean } = {},
 ): Promise<T> {
-  const { auth = true, headers: initHeaders, ...fetchInit } = options;
+  const { auth: _auth = true, headers: initHeaders, ...fetchInit } = options;
+  void _auth;
   const headers = new Headers(initHeaders);
   if (!headers.has("Content-Type") && shouldSetJsonContentType(fetchInit.body)) {
     headers.set("Content-Type", "application/json");
   }
-  if (auth !== false) {
-    const token = getToken();
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-  }
+  clearLegacyAccessToken();
 
-  const resp = await fetch(path, { ...fetchInit, headers });
+  const resp = await fetch(path, {
+    ...fetchInit,
+    headers,
+    credentials: fetchInit.credentials ?? "include",
+  });
   const data = await parseJson(resp);
 
   if (!resp.ok) {
     if (resp.status === 401 && typeof window !== "undefined") {
-      localStorage.removeItem(TOKEN_KEY);
+      clearLegacyAccessToken();
     }
     throw new ApiError(
       formatApiErrorDetail(data, resp.statusText || "Request failed"),
@@ -208,7 +220,18 @@ export async function fetchCurrentUser(): Promise<BackendUser> {
   return apiRequest<BackendUser>("/api/v1/auth/me");
 }
 
-export async function initiateDeposit(amount: number, channel = "mobile_money") {
+export async function logoutUser(): Promise<void> {
+  await apiRequest<void>("/api/v1/auth/logout", { method: "POST" });
+}
+
+export async function initiateDeposit(
+  amount: number,
+  channel = "mobile_money",
+  phone?: string,
+  idempotencyKey?: string,
+) {
+  const headers: HeadersInit = {};
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
   return apiRequest<{
     id: string;
     provider_ref: string;
@@ -217,7 +240,8 @@ export async function initiateDeposit(amount: number, channel = "mobile_money") 
     authorization_url: string | null;
   }>("/api/v1/payments/deposits", {
     method: "POST",
-    body: JSON.stringify({ amount, channel }),
+    headers,
+    body: JSON.stringify({ amount, channel, phone, payer_phone: phone }),
   });
 }
 
@@ -225,7 +249,11 @@ export async function initiateWithdrawal(
   amount: number,
   channel = "mobile_money",
   destination?: string,
+  phone?: string,
+  idempotencyKey?: string,
 ) {
+  const headers: HeadersInit = {};
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
   return apiRequest<{
     id: string;
     provider_ref: string;
@@ -233,8 +261,26 @@ export async function initiateWithdrawal(
     amount: number;
   }>("/api/v1/payments/withdrawals", {
     method: "POST",
-    body: JSON.stringify({ amount, channel, destination }),
+    headers,
+    body: JSON.stringify({ amount, channel, destination, phone }),
   });
+}
+
+export async function getPaymentStatus(reference: string) {
+  return apiRequest<{
+    id: string;
+    user_id: string;
+    provider: string;
+    kind: string;
+    provider_ref: string;
+    amount: number;
+    currency: string;
+    status: string;
+    channel: string | null;
+    authorization_url: string | null;
+    created_at: string | null;
+    completed_at: string | null;
+  }>(`/api/v1/payments/${encodeURIComponent(reference)}`);
 }
 
 export async function withdraw(amount: number, description = "") {
@@ -311,6 +357,7 @@ export async function placeBet(input: {
     market_name?: string;
   }>;
   flex_cut?: number;
+  acceptOddsChange?: boolean;
   idempotencyKey?: string;
 }) {
   const headers: HeadersInit = {};
@@ -324,6 +371,38 @@ export async function placeBet(input: {
       stake: input.stake,
       selections: input.selections,
       flex_cut: input.flex_cut,
+      accept_odds_change: input.acceptOddsChange ?? false,
+    }),
+  });
+}
+
+export async function placeBetBatch(input: {
+  bets: Array<{
+    stake: number;
+    selections: Array<{
+      match_id: string;
+      home_team: string;
+      away_team: string;
+      selection: string;
+      selection_label: string;
+      odds: number;
+      league?: string;
+      market_id?: string;
+      market_name?: string;
+    }>;
+    flex_cut?: number;
+  }>;
+  acceptOddsChange?: boolean;
+  idempotencyKey?: string;
+}) {
+  const headers: HeadersInit = {};
+  if (input.idempotencyKey) headers["Idempotency-Key"] = input.idempotencyKey;
+  return apiRequest<BackendBet[]>("/api/v1/bets/place/batch", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      bets: input.bets,
+      accept_odds_change: input.acceptOddsChange ?? false,
     }),
   });
 }
@@ -345,7 +424,10 @@ export async function getBetByVerifyCode(code: string) {
 }
 
 export function isBackendEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_USE_BACKEND === "true";
+  return (
+    process.env.NEXT_PUBLIC_USE_BACKEND === "true" ||
+    process.env.NEXT_PUBLIC_ENVIRONMENT === "production"
+  );
 }
 
 export function useBackendApi(): boolean {

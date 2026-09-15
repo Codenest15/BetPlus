@@ -7,22 +7,27 @@ Internet
    │
    ▼
 Vercel (Next.js)          https://yourdomain.com
-   │  HTTPS  /api/v1/*
-   ▼
+    │  HTTPS  /api/v1/*
+    ▼
 Heroku (FastAPI/Uvicorn)  https://api.yourdomain.com
-   │  PostgreSQL
-   ▼
+    │  PostgreSQL
+    ▼
 Supabase PostgreSQL
 ```
 
-The browser talks only to Vercel (and Vercel rewrites `/api/v1/*` to FastAPI).
+The browser talks only to Vercel (Vercel rewrites `/api/v1/*` to FastAPI).
 The browser never receives `DATABASE_URL`, payment secrets, or JWT secrets.
 
-This application is **not real-money ready** until `PAYMENTS_MODE=paystack`
-(or another verified provider) is configured, webhook signatures are verified
-in staging, and a restore test has been run. Simulated deposits credit the
-wallet on the server after `/api/v1/payments/deposits`; they are ledger
-simulations, not processor funds.
+Authentication uses an HTTP-only `betplus_access_token` cookie set by FastAPI.
+Do not persist JWTs in `localStorage` or `sessionStorage`.
+
+This application is **not real-money ready** until:
+
+- `PAYMENTS_MODE=moolre`
+- sandbox then live Moolre credentials are configured
+- a real provider transaction has been reconciled
+- webhook callback secret verification has been proven in staging
+- a database restore test has been run
 
 ---
 
@@ -33,7 +38,7 @@ simulations, not processor funds.
 3. Enable backups on the chosen plan (Point-in-Time Recovery on paid plans).
 4. Restore procedure: Supabase Dashboard → Database → Backups → Restore to a
    **staging** project. Confirm `alembic current` and a login + wallet read.
-5. Recommended backup settings to document for ops:
+5. Recommended backup settings:
    - Daily backups (plan default)
    - PITR retention per plan
    - Restore test at least once before production traffic
@@ -45,6 +50,9 @@ DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supaba
 ```
 
 `postgres://` URLs are accepted and normalized. SSL is added in production.
+
+Production schema is created only with Alembic (`python -m app.db.migrate`).
+Do **not** use `Base.metadata.create_all()` in production.
 
 ---
 
@@ -64,11 +72,30 @@ heroku config:set SEED_DEMO_DATA=false
 heroku config:set SEED_DEMO_USERS=false
 heroku config:set ALLOW_DEMO_SEED=false
 heroku config:set RATE_LIMIT_ENABLED=true
-heroku config:set PAYMENTS_MODE=paystack
-heroku config:set PAYMENT_SECRET_KEY=sk_...
-heroku config:set PAYMENT_PUBLIC_KEY=pk_...
-heroku config:set PAYMENT_WEBHOOK_SECRET=...
+heroku config:set PAYMENTS_MODE=moolre
+heroku config:set MOOLRE_ENV=sandbox
+heroku config:set MOOLRE_API_BASE_URL=https://sandbox.moolre.com
+heroku config:set MOOLRE_API_USER=...
+heroku config:set MOOLRE_PUBLIC_KEY=...
+heroku config:set MOOLRE_API_KEY=...
+heroku config:set MOOLRE_ACCOUNT_NUMBER=...
+heroku config:set MOOLRE_WEBHOOK_SECRET=...
 heroku config:set PAYMENT_CURRENCY=GHS
+```
+
+Process types:
+
+| Dyno | Command |
+|------|---------|
+| `web` | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1` |
+| `release` | `python -m app.db.migrate` |
+| `worker` | `python -m app.workers.live_sync_worker` |
+| `worker-settlement` | `python -m app.workers.settlement_worker` |
+
+Scale after deploy:
+
+```bash
+heroku ps:scale web=1 worker=1 worker-settlement=1
 ```
 
 Staging (simulated money only):
@@ -88,8 +115,7 @@ Deploy from repo root with the backend as the app root, or:
 git subtree push --prefix backend heroku main
 ```
 
-Release phase runs `alembic upgrade head`. Do **not** use `create_all()` in
-production.
+Release phase runs Alembic. Do **not** use `create_all()` in production.
 
 Verify:
 
@@ -123,9 +149,53 @@ npx vercel --prod
 Verify:
 
 - Homepage loads
-- Login hits `/api/v1/auth/login` through the rewrite
+- Login hits `/api/v1/auth/login` through the rewrite and sets the HTTP-only cookie
 - Catalog loads `/api/v1/catalog/games`
-- Wallet operations go to FastAPI, not localStorage
+- Wallet deposits go to FastAPI, not localStorage
+
+---
+
+## 4. Moolre
+
+Collection (deposits) uses:
+
+- `POST {base}/open/transact/payment`
+- Headers: `X-API-USER`, `X-API-PUBKEY`
+- Payer phone in local `0`-prefixed Ghana format
+- Channels: `MTN`, `TELECEL`, `AT`
+
+Status uses:
+
+- `POST {base}/open/transact/status`
+- Headers: `X-API-USER`, `X-API-PUBKEY` (collections) or `X-API-KEY` (transfers)
+- Success is `data.txstatus == 1`, not envelope `status == 1`
+
+Transfers / withdrawals use:
+
+- `POST {base}/open/transact/transfer`
+- Headers: `X-API-USER`, `X-API-KEY` (private key)
+
+Callbacks:
+
+- `POST /api/v1/payments/webhook`
+- Authenticity is the payload `data.secret` compared to `MOOLRE_WEBHOOK_SECRET`
+- Wallet credit happens only after a status API verification
+
+Configure the callback URL in the Moolre dashboard to:
+
+```text
+https://api.yourdomain.com/api/v1/payments/webhook
+```
+
+### Switching sandbox → live
+
+1. Complete a sandbox deposit, webhook, and withdrawal restore test.
+2. Set `MOOLRE_ENV=production`.
+3. Set `MOOLRE_API_BASE_URL=https://api.moolre.com`.
+4. Replace sandbox `MOOLRE_*` values with live credentials.
+5. Redeploy the Heroku API. Do not change frontend env for Moolre secrets.
+
+`MOOLRE_ENV=sandbox` refuses the live API URL.
 
 ---
 
@@ -139,17 +209,18 @@ Verify:
 | `CORS_ORIGINS` | exact Vercel/custom origins, no `*` |
 | `SEED_DEMO_DATA` | `false` |
 | `SEED_DEMO_USERS` | `false` |
-| `PAYMENTS_MODE` | `paystack` for live money; `simulated` only with `ALLOW_SIMULATED_PAYMENTS=true` on staging |
-| `PAYMENT_*` | provider keys; webhook URL `https://api.yourdomain.com/api/v1/payments/webhook` |
+| `PAYMENTS_MODE` | `moolre` for live money; `simulated` only with `ALLOW_SIMULATED_PAYMENTS=true` on staging |
+| `MOOLRE_ENV` | `sandbox` until go-live, then `production` |
+| `MOOLRE_*` | provider keys and callback secret |
 | `RATE_LIMIT_ENABLED` | `true` |
 
 ---
 
 ## Staging checklist
 
-- [ ] Alembic head applied
+- [ ] Alembic head applied (`007_webhook_events`)
 - [ ] Health and ready endpoints 200
-- [ ] Register / login / `/me`
+- [ ] Register / login / `/me` using the HTTP-only cookie
 - [ ] Catalog games from PostgreSQL
 - [ ] Bet placement uses server odds (tampered client odds ignored)
 - [ ] Concurrent withdrawals/bets against Postgres (`POSTGRES_TEST_URL`)
@@ -158,4 +229,13 @@ Verify:
 - [ ] Demo passwords not seeded
 - [ ] CORS rejects unknown origins
 - [ ] Backup restore tested on a staging database
-- [ ] Paystack webhook signature verified (if using live/test keys)
+- [ ] Moolre callback `data.secret` verified with `MOOLRE_WEBHOOK_SECRET`
+- [ ] Duplicate callback does not double-credit
+- [ ] Worker and settlement dynos are running
+
+## Rollback
+
+1. `heroku rollback` the API release.
+2. Do **not** run Alembic downgrades against production unless the downgrade
+   is reviewed; prefer a forward fix.
+3. Keep the previous Vercel deployment available for instant revert.
