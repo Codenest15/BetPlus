@@ -163,7 +163,7 @@ export default function AdminBetDetailPage() {
         });
         const updated = backendBetToPlacedBet(remote);
         setBet(updated);
-        setMessage("Picks saved. User ticket shows the slip as placed.");
+        setMessage("Picks saved on this ticket.");
       } catch (err) {
         setMessage(err instanceof Error ? err.message : "Failed to save picks");
       }
@@ -190,7 +190,7 @@ export default function AdminBetDetailPage() {
       { betId: updated.id, bookingCode: updated.bookingCode },
     );
     setBet(updated);
-    setMessage("Picks saved. User ticket shows the slip as placed.");
+    setMessage("Picks saved on this ticket.");
   }
 
   function handleApplyClaimPick(claim: BetSupportClaim) {
@@ -219,7 +219,7 @@ export default function AdminBetDetailPage() {
 
     reload();
     setMessage(
-      `Leg ${claim.legIndex + 1} updated to "${claim.userClaim}". User ticket shows the slip as placed.`,
+      `Leg ${claim.legIndex + 1} saved as "${claim.userClaim}".`,
     );
   }
 

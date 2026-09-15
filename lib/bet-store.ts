@@ -16,7 +16,7 @@ import { canAdminEditLeg, getBetEditStatus } from "./bet-edit-rules";
 import { getMatchFtScore } from "./match-results";
 import { normalizeTicketScoreLabel } from "./ticket-display";
 import { computeAutoSettlement, reconcileBetRecord } from "./bet-settlement";
-import { getUserById, updateUserBalance } from "./auth-store";
+import { getUserById, updateUserBalance, useFreeBetBalance } from "./auth-store";
 import type { User } from "./user-types";
 import {
   recordBetLost,
@@ -94,6 +94,7 @@ export function placeBet(input: {
   verifyCode?: string;
   ticketId?: string;
   flexCut?: number;
+  usedFreeBet?: boolean;
 }): PlacedBet {
   const bonus =
     input.selections.length >= 3
@@ -109,9 +110,14 @@ export function placeBet(input: {
     selections: input.selections,
     originalSelections: cloneSelections(input.selections),
     stake: input.stake,
+    originalStake: input.stake,
     totalOdds: input.totalOdds,
+    originalTotalOdds: input.totalOdds,
     potentialWin: input.potentialWin,
+    originalPotentialWin: input.potentialWin,
     bonus,
+    originalBonus: bonus,
+    usedFreeBet: input.usedFreeBet === true ? true : undefined,
     flexCut:
       input.flexCut != null && input.flexCut > 0 ? input.flexCut : undefined,
     status: "open",
@@ -149,10 +155,23 @@ export function placeBetForUser(input: {
   verifyCode?: string;
   ticketId?: string;
   flexCut?: number;
+  usedFreeBet?: boolean;
 }): { bet: PlacedBet; user: User } | { error: string } {
   const user = getUserById(input.userId);
   if (!user) return { error: "User not found." };
   if (input.stake < 1) return { error: "Minimum stake is GH₵1." };
+
+  if (input.usedFreeBet) {
+    if (input.stake > (user.freeBetBalance ?? 0)) {
+      return { error: "Insufficient free bet balance." };
+    }
+    const freeResult = useFreeBetBalance(input.userId, input.stake);
+    if ("error" in freeResult) return { error: freeResult.error };
+
+    const bet = placeBet({ ...input, usedFreeBet: true });
+    return { bet, user: freeResult.user };
+  }
+
   if (input.stake > user.balance) return { error: "Insufficient balance." };
 
   const balanceResult = updateUserBalance(input.userId, -input.stake);
@@ -255,7 +274,6 @@ export function reconcileBetsForMatch(matchId: string): void {
 }
 
 export function getBetsByUser(userId: string): PlacedBet[] {
-  ensureDemoHistoryBets(userId);
   const bets = readBets();
   const result: PlacedBet[] = [];
 
@@ -329,9 +347,42 @@ export function adminUpdateBet(
   const bets = readBets();
   const idx = bets.findIndex((b) => b.id === betId);
   if (idx === -1) return null;
-  // Original record is never overwritten — only live ticket fields may change.
-  bets[idx] = { ...bets[idx], ...updates };
+  const prev = bets[idx];
+  const next: PlacedBet = { ...prev, ...updates };
+
+  if (!prev.originalSelections?.length && updates.selections) {
+    next.originalSelections = cloneSelections(prev.selections);
+    if (prev.originalStake == null) next.originalStake = prev.stake;
+    if (prev.originalTotalOdds == null) next.originalTotalOdds = prev.totalOdds;
+    if (prev.originalPotentialWin == null) {
+      next.originalPotentialWin = prev.potentialWin;
+    }
+    if (prev.originalBonus == null) next.originalBonus = prev.bonus;
+  }
+  if (updates.stake != null && prev.originalStake == null) {
+    next.originalStake = prev.stake;
+  }
+  if (updates.totalOdds != null && prev.originalTotalOdds == null) {
+    next.originalTotalOdds = prev.totalOdds;
+  }
+  if (updates.potentialWin != null && prev.originalPotentialWin == null) {
+    next.originalPotentialWin = prev.potentialWin;
+  }
+  if (updates.bonus != null && prev.originalBonus == null) {
+    next.originalBonus = prev.bonus;
+  }
+
+  const slipChanged =
+    updates.selections !== undefined ||
+    updates.stake !== undefined ||
+    updates.totalOdds !== undefined ||
+    updates.potentialWin !== undefined ||
+    updates.bonus !== undefined ||
+    updates.legResults !== undefined;
+
+  bets[idx] = next;
   writeBets(bets);
+  if (slipChanged) emitBetsUpdated();
   return bets[idx];
 }
 

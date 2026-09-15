@@ -11,6 +11,8 @@ interface MarketOddsButtonProps {
   outcomeId: string;
   label: string;
   odds: number;
+  onLiveRow?: boolean;
+  suspended?: boolean;
 }
 
 export function MarketOddsButton({
@@ -20,6 +22,8 @@ export function MarketOddsButton({
   outcomeId,
   label,
   odds,
+  onLiveRow = false,
+  suspended = false,
 }: MarketOddsButtonProps) {
   const { addMarketSelection, isMarketSelected } = useBetSlip();
   const selected = isMarketSelected(match.id, marketId, outcomeId);
@@ -29,15 +33,19 @@ export function MarketOddsButton({
       label={label}
       odds={odds}
       selected={selected}
-      onClick={() =>
+      onLiveRow={onLiveRow}
+      suspended={suspended}
+      className="min-h-[2.75rem] py-1"
+      onClick={() => {
+        if (suspended) return;
         addMarketSelection(match, {
           marketId,
           marketName,
           outcomeId,
           outcomeLabel: label,
           odds,
-        })
-      }
+        });
+      }}
     />
   );
 }

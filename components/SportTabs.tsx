@@ -1,25 +1,29 @@
 "use client";
 
-import { SPORTS } from "@/lib/mock-data";
 import { AppIcon } from "@/components/AppIcon";
+import { SPORTS } from "@/lib/mock-data";
 import type { Sport } from "@/lib/types";
+import { ScrollRow } from "./ScrollRow";
 
 interface SportTabsProps {
   active: Sport | "all";
   onChange: (sport: Sport | "all") => void;
 }
 
+const pillClass = (active: boolean) =>
+  `shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-medium ${
+    active
+      ? "bg-brand-dark text-white"
+      : "bg-surface-elevated text-muted"
+  }`;
+
 export function SportTabs({ active, onChange }: SportTabsProps) {
   return (
-    <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+    <ScrollRow fadeEdge trackClassName="py-0.5">
       <button
         type="button"
         onClick={() => onChange("all")}
-        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-          active === "all"
-            ? "bg-brand-dark text-white"
-            : "bg-surface-elevated text-muted"
-        }`}
+        className={pillClass(active === "all")}
       >
         All
       </button>
@@ -28,16 +32,12 @@ export function SportTabs({ active, onChange }: SportTabsProps) {
           key={sport.id}
           type="button"
           onClick={() => onChange(sport.id)}
-          className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${
-            active === sport.id
-              ? "bg-brand-dark text-white"
-              : "bg-surface-elevated text-muted"
-          }`}
+          className={`flex ${pillClass(active === sport.id)} items-center gap-1`}
         >
           <AppIcon name={sport.icon} size={16} />
           {sport.label}
         </button>
       ))}
-    </div>
+    </ScrollRow>
   );
 }

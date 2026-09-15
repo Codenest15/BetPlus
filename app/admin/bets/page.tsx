@@ -3,12 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
-import { DemoSeedPanel } from "@/components/admin/DemoSeedPanel";
 import { SettleBetMenu } from "@/components/admin/SettleBetMenu";
 import { betWasCorrected, openSupportClaimsCount } from "@/lib/bet-record";
 import { getAllUsers } from "@/lib/auth-store";
 import { getAllBets } from "@/lib/bet-store";
-import { seedUser1DemoSlip } from "@/lib/demo-seed";
 import type { PlacedBet } from "@/lib/bet-types";
 import type { User } from "@/lib/user-types";
 import { adminGetBets, adminGetUsers, useBackendApi } from "@/lib/backend-client";
@@ -27,18 +25,12 @@ export default function AdminBetsPage() {
   const backendMode = useBackendApi();
   const [bets, setBets] = useState<PlacedBet[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [demo, setDemo] = useState<{
-    user: User;
-    bet: PlacedBet;
-    created: boolean;
-  } | null>(null);
   const [filter, setFilter] = useState<
     PlacedBet["status"] | "all" | "claims" | "edit"
   >("all");
 
   const reload = useCallback(async () => {
     if (backendMode) {
-      setDemo(null);
       const [remoteBets, remoteUsers] = await Promise.all([
         adminGetBets(),
         adminGetUsers(),
@@ -47,7 +39,6 @@ export default function AdminBetsPage() {
       setUsers(remoteUsers.map(backendUserToLocal));
       return;
     }
-    setDemo(seedUser1DemoSlip());
     setBets(getAllBets());
     setUsers(getAllUsers());
   }, [backendMode]);
@@ -81,8 +72,6 @@ export default function AdminBetsPage() {
             <span className="font-medium">open</span>.
           </p>
         </div>
-
-        {!backendMode && <DemoSeedPanel demo={demo} onReload={() => void reload()} />}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">

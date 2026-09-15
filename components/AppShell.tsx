@@ -3,10 +3,12 @@
 import { usePathname } from "next/navigation";
 import { AuthProvider } from "@/lib/auth-context";
 import { BetSlipProvider } from "@/lib/betslip-context";
+import { CatalogProvider } from "@/lib/catalog-context";
+import { MatchSearchProvider } from "@/lib/match-search-context";
 import { AuthModal } from "./AuthModal";
 import { ReferralCapture } from "./ReferralCapture";
 import { BetSlip } from "./BetSlip";
-import { BetSlipBar } from "./BetSlipBar";
+import { BetSlipFab } from "./BetSlipFab";
 import { BetSlipSheet } from "./BetSlipSheet";
 import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
@@ -44,7 +46,7 @@ function DefaultShell({ children }: { children: React.ReactNode }) {
       </div>
       <SiteFooter className="hidden md:block" />
       <MobileNav />
-      <BetSlipBar />
+      <BetSlipFab />
       <BetSlipSheet />
       <AuthModal />
       <ReferralCapture />
@@ -55,21 +57,35 @@ function DefaultShell({ children }: { children: React.ReactNode }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAdminRoute = pathname?.startsWith("/admin");
+  const isManagerRoute = pathname?.startsWith("/manager");
   const isTicketPage = pathname?.startsWith("/bet/");
 
   if (isAdminRoute) {
     return <>{children}</>;
   }
 
+  if (isManagerRoute) {
+    return (
+      <AuthProvider>
+        <AuthModal />
+        {children}
+      </AuthProvider>
+    );
+  }
+
   return (
     <AuthProvider>
-      <BetSlipProvider>
-        {isTicketPage ? (
-          <TicketPageShell>{children}</TicketPageShell>
-        ) : (
-          <DefaultShell>{children}</DefaultShell>
-        )}
-      </BetSlipProvider>
+      <CatalogProvider>
+        <MatchSearchProvider>
+          <BetSlipProvider>
+            {isTicketPage ? (
+              <TicketPageShell>{children}</TicketPageShell>
+            ) : (
+              <DefaultShell>{children}</DefaultShell>
+            )}
+          </BetSlipProvider>
+        </MatchSearchProvider>
+      </CatalogProvider>
     </AuthProvider>
   );
 }

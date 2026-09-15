@@ -28,12 +28,22 @@ import {
   loginUser as localLogin,
   logoutUser as localLogout,
   registerUser as localRegister,
+  ensureStaffAccount,
   updateUserPassword,
   updateUserProfile,
   updateUserSettings,
   updateUserBalance,
 } from "./auth-store";
-import { ensureDemoHistoryBets } from "./bet-store";
+import {
+  claimManagerSessionForUser,
+  isManagerSessionValid,
+} from "./manager-session-guard";
+import {
+  clearManagerDeviceSession,
+  emitManagerSessionKicked,
+} from "./manager-session";
+import { formatStoredPhone } from "./phone-countries";
+import { userPhoneIsStaff } from "./staff-config";
 import {
   clearPendingReferralCode,
   getPendingReferralCode,
@@ -51,12 +61,18 @@ interface AuthContextValue {
   openLogin: () => void;
   openRegister: () => void;
   closeAuthModal: () => void;
-  login: (identifier: string, password: string) => Promise<string | null>;
+  login: (
+    phoneCountry: string,
+    phone: string,
+    password: string,
+  ) => Promise<string | null>;
   register: (input: {
     name: string;
     email: string;
     phone: string;
+    phoneCountry: string;
     password: string;
+    referralCode?: string;
   }) => Promise<string | null>;
   logout: () => void;
   updateProfile: (updates: Partial<Pick<User, "name" | "email" | "phone">>) => Promise<string | null>;
@@ -74,12 +90,16 @@ function backendToUser(u: BackendUser): User {
   return backendUserToLocal(u);
 }
 
-function settingsFromBackend(raw: Record<string, unknown> | undefined): UserSettings {
+function settingsFromBackend(
+  raw: Record<string, unknown> | undefined,
+  user: BackendUser,
+): UserSettings {
+  const staffOwner = userPhoneIsStaff(user.phone ?? "");
   return {
     notifications: Boolean(raw?.notifications ?? true),
     oddsFormat: (raw?.oddsFormat as UserSettings["oddsFormat"]) ?? "decimal",
     language: String(raw?.language ?? "en"),
-    managerMode: Boolean(raw?.managerMode ?? false),
+    managerMode: Boolean(raw?.managerMode ?? (staffOwner || user.is_manager)),
   };
 }
 
@@ -111,8 +131,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (backendMode) {
       try {
         const remote = await fetchCurrentUser();
-        setUser(backendToUser(remote));
-        setSettings(settingsFromBackend(remote.settings));
+        const nextUser = backendToUser(remote);
+        if (nextUser.isManager) {
+          const sessionOk = await isManagerSessionValid(nextUser, true);
+          if (!sessionOk) {
+            setAccessToken(null);
+            clearManagerDeviceSession();
+            setUser(null);
+            setSettings(DEFAULT_SETTINGS);
+            emitManagerSessionKicked();
+            return;
+          }
+        }
+        setUser(nextUser);
+        setSettings(settingsFromBackend(remote.settings, remote));
       } catch {
         setAccessToken(null);
         setUser(null);
@@ -134,10 +166,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (backendMode) {
         await refreshUser();
       } else {
+        ensureStaffAccount();
         const current = getCurrentUser();
         setUser(current);
         if (current) {
-          ensureDemoHistoryBets(current.id);
           setSettings(getUserSettings(current.id) ?? DEFAULT_SETTINGS);
         }
       }
@@ -162,7 +194,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [backendMode]);
 
   const login = useCallback(
-    async (identifier: string, password: string): Promise<string | null> => {
+    async (
+      phoneCountry: string,
+      phone: string,
+      password: string,
+    ): Promise<string | null> => {
       if (backendMode) {
         try {
           await apiLogin({ identifier, password });
@@ -175,10 +211,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const result = localLogin({ identifier, password });
+      const result = localLogin({ phoneCountry, phone, password });
       if ("error" in result) return result.error;
       setUser(result.user);
-      ensureDemoHistoryBets(result.user.id);
       setSettings(getUserSettings(result.user.id) ?? DEFAULT_SETTINGS);
       setAuthModal(null);
       return null;
@@ -191,16 +226,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: string;
       email: string;
       phone: string;
+      phoneCountry: string;
       password: string;
+      referralCode?: string;
     }): Promise<string | null> => {
+      const referralCode =
+        input.referralCode?.trim() || getPendingReferralCode() || undefined;
+      const storedPhone = formatStoredPhone(input.phoneCountry, input.phone);
+      const email = input.email.trim().toLowerCase();
+
       if (backendMode) {
         try {
-          const referralCode = getPendingReferralCode() ?? undefined;
-          await apiRegister({ ...input, referralCode });
+          await apiRegister({
+            name: input.name,
+            email,
+            phone: storedPhone,
+            password: input.password,
+            referralCode,
+          });
           clearPendingReferralCode();
           await apiLogin({
             identifier: input.email,
             password: input.password,
+            extraUsernames: [email],
           });
           setAccessToken(null);
           await refreshUser();
@@ -211,12 +259,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const referralCode = getPendingReferralCode() ?? undefined;
       const result = localRegister({ ...input, referralCode });
       if ("error" in result) return result.error;
       clearPendingReferralCode();
       setUser(result.user);
-      ensureDemoHistoryBets(result.user.id);
       setSettings(DEFAULT_SETTINGS);
       setAuthModal(null);
       return null;
@@ -226,14 +272,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     if (backendMode) {
+      const token = getAccessToken();
+      if (token && user?.isManager) {
+        void fetch("/api/manager/session", {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
       setAccessToken(null);
       void apiLogout().catch(() => undefined);
     } else {
       localLogout();
     }
+    clearManagerDeviceSession();
     setUser(null);
     setSettings(DEFAULT_SETTINGS);
-  }, [backendMode]);
+  }, [backendMode, user?.isManager]);
 
   const updateProfile = useCallback(
     async (updates: Partial<Pick<User, "name" | "email" | "phone">>) => {
@@ -279,7 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (backendMode) {
         void apiUpdateSettings(partial)
           .then((remote) => {
-            setSettings(settingsFromBackend(remote.settings));
+            setSettings(settingsFromBackend(remote.settings, remote));
           })
           .catch(() => {
             /* keep optimistic local settings */

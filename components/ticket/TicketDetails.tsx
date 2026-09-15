@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useBetSlip } from "@/lib/betslip-context";
+import { useAuth } from "@/lib/auth-context";
 import type { PlacedBet } from "@/lib/bet-types";
 import { isDemoBetCode } from "@/lib/demo-bets";
 import {
@@ -32,6 +33,7 @@ interface TicketDetailsProps {
 
 export function TicketDetails({ bet, onBetUpdate }: TicketDetailsProps) {
   const router = useRouter();
+  const { canManage } = useAuth();
   const { loadSlip, setSlipTab, setBetslipOpen } = useBetSlip();
   const legs = getLegDisplays(bet);
   const isOpen = bet.status === "open";
@@ -92,14 +94,14 @@ export function TicketDetails({ bet, onBetUpdate }: TicketDetailsProps) {
         <TicketLegList bet={bet} legs={legs} onBetUpdate={onBetUpdate} />
         <TicketFooter bet={bet} />
 
-        {isOpen && onBetUpdate && !isDemo && (
+        {isOpen && canManage && onBetUpdate && !isDemo && (
           <div className="border-t border-brand-soft px-3 py-4 text-center">
             <p className="mb-2 text-[10px] text-muted">Preview settled ticket</p>
             <div className="flex justify-center gap-2">
               <button
                 type="button"
                 onClick={() => {
-                  onBetUpdate({ ...bet, status: "won" });
+                  onBetUpdate?.({ ...bet, status: "won" });
                 }}
                 className="rounded border border-accent px-3 py-1.5 text-xs font-semibold text-accent"
               >
@@ -108,7 +110,7 @@ export function TicketDetails({ bet, onBetUpdate }: TicketDetailsProps) {
               <button
                 type="button"
                 onClick={() => {
-                  onBetUpdate({ ...bet, status: "lost" });
+                  onBetUpdate?.({ ...bet, status: "lost" });
                 }}
                 className="rounded border border-live px-3 py-1.5 text-xs font-semibold text-live"
               >

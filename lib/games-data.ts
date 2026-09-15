@@ -8,6 +8,8 @@ export interface Game {
   gradient: string;
   icon: IconId;
   featured?: boolean;
+  /** Link target — defaults to /games */
+  href?: string;
 }
 
 export const GAMES: Game[] = [

@@ -14,7 +14,7 @@ export default function BetTicketPage() {
   const params = useParams();
   const code = (params.code as string)?.toUpperCase();
   const backendMode = useBackendApi();
-  const { refreshUser } = useAuth();
+  const { refreshUser, canManage } = useAuth();
   const [bet, setBet] = useState<PlacedBet | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -72,7 +72,9 @@ export default function BetTicketPage() {
   return (
     <TicketDetails
       bet={bet}
-      onBetUpdate={(updated) => setBet(updated)}
+      onBetUpdate={
+        canManage ? (updated) => setBet(updated) : undefined
+      }
     />
   );
 }

@@ -9,6 +9,7 @@ import { getMyBets, useBackendApi } from "@/lib/backend-client";
 import { backendBetToPlacedBet } from "@/lib/backend-mappers";
 import { deferEffect } from "@/lib/defer-effect";
 import type { BetStatus, PlacedBet } from "@/lib/bet-types";
+import { openBetSlipRevision } from "@/lib/ticket-display";
 
 export type TicketsTab = "open-bets" | "bet-history";
 export type SettledFilter = "unsettled" | "settled" | "all";
@@ -144,6 +145,13 @@ export function BetTicketsPanel({
 
   const activeTab = controlledTab ?? internalTab;
 
+  useEffect(() => {
+    if (activeTab === "bet-history") {
+      setSettledFilter("settled");
+      setResultFilter("all");
+    }
+  }, [activeTab]);
+
   function setActiveTab(tab: TicketsTab) {
     if (onTabChange) onTabChange(tab);
     else setInternalTab(tab);
@@ -163,10 +171,12 @@ export function BetTicketsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshKey forces re-read after settle/clear
   }, [user?.id, backendMode, remoteBets, refreshKey]);
 
-  const filtered = useMemo(
-    () => filterBets(allBets, settledFilter, resultFilter),
-    [allBets, settledFilter, resultFilter],
-  );
+  const filtered = useMemo(() => {
+    if (activeTab === "open-bets") {
+      return allBets.filter((bet) => bet.status === "open");
+    }
+    return filterBets(allBets, settledFilter, resultFilter);
+  }, [allBets, activeTab, settledFilter, resultFilter]);
 
   const grouped = useMemo(() => groupByDate(filtered), [filtered]);
 
@@ -228,29 +238,29 @@ export function BetTicketsPanel({
         </div>
       )}
 
-      <div className="flex items-center gap-2 border-b border-border bg-white px-3 py-2">
-        <FilterSelect
-          label="Settled filter"
-          value={settledFilter}
-          onChange={(v) => setSettledFilter(v as SettledFilter)}
-          options={[
-            { value: "unsettled", label: "Unsettled" },
-            { value: "settled", label: "Settled" },
-            { value: "all", label: "All" },
-          ]}
-        />
-        <FilterSelect
-          label="Bet result filter"
-          value={resultFilter}
-          onChange={(v) => setResultFilter(v as ResultFilter)}
-          options={[
-            { value: "all", label: "Bet Result" },
-            { value: "won", label: "Win" },
-            { value: "lost", label: "Lost" },
-            { value: "void", label: "Void" },
-          ]}
-        />
-        {activeTab === "bet-history" && (
+      {activeTab === "bet-history" && (
+        <div className="flex items-center gap-2 border-b border-border bg-white px-3 py-2">
+          <FilterSelect
+            label="Settled filter"
+            value={settledFilter}
+            onChange={(v) => setSettledFilter(v as SettledFilter)}
+            options={[
+              { value: "unsettled", label: "Unsettled" },
+              { value: "settled", label: "Settled" },
+              { value: "all", label: "All" },
+            ]}
+          />
+          <FilterSelect
+            label="Bet result filter"
+            value={resultFilter}
+            onChange={(v) => setResultFilter(v as ResultFilter)}
+            options={[
+              { value: "all", label: "Bet Result" },
+              { value: "won", label: "Win" },
+              { value: "lost", label: "Lost" },
+              { value: "void", label: "Void" },
+            ]}
+          />
           <button
             type="button"
             onClick={handleClearHistory}
@@ -262,8 +272,8 @@ export function BetTicketsPanel({
               <path strokeLinecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto bg-background px-3 py-3">
         {betsLoading ? (
@@ -292,7 +302,7 @@ export function BetTicketsPanel({
                 <p className="mb-2 text-xs font-medium text-muted">{date}</p>
                 <ul className="space-y-3">
                   {bets.map((bet) => (
-                    <li key={bet.id}>
+                    <li key={`${bet.id}-${openBetSlipRevision(bet)}`}>
                       <BetHistoryCard
                         bet={bet}
                         onRemix={() => handleRemix(bet)}

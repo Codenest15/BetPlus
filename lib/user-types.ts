@@ -4,6 +4,8 @@ export interface User {
   email: string;
   phone: string;
   balance: number;
+  /** Admin-granted free bet credits (consistency rewards). */
+  freeBetBalance?: number;
   createdAt: string;
   /** Granted by admin — shows Manager tab and match control tools */
   isManager?: boolean;
@@ -24,6 +26,8 @@ export interface UserSettings {
 export interface StoredUser extends User {
   password: string;
   settings: UserSettings;
+  /** Latest manager login session — only one device may match (local mode). */
+  managerSessionId?: string;
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {

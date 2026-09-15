@@ -13,6 +13,7 @@ export const REFERRAL_COMMISSION_RATE = 0.05;
 /** Managers receive this share of gross referral revenue; admin/platform keeps the rest. */
 export const MANAGER_REFERRAL_SHARE = 0.5;
 export const PENDING_REFERRAL_KEY = "betplus_pending_ref";
+const PENDING_REFERRAL_BACKUP_KEY = "betplus_pending_ref_backup";
 
 const REFERRALS_KEY = "betplus_referrals";
 
@@ -62,16 +63,21 @@ export function setPendingReferralCode(code: string) {
   const normalized = code.trim().toUpperCase();
   if (!normalized) return;
   sessionStorage.setItem(PENDING_REFERRAL_KEY, normalized);
+  localStorage.setItem(PENDING_REFERRAL_BACKUP_KEY, normalized);
 }
 
 export function getPendingReferralCode(): string | null {
   if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(PENDING_REFERRAL_KEY);
+  return (
+    sessionStorage.getItem(PENDING_REFERRAL_KEY) ??
+    localStorage.getItem(PENDING_REFERRAL_BACKUP_KEY)
+  );
 }
 
 export function clearPendingReferralCode() {
   if (typeof window === "undefined") return;
   sessionStorage.removeItem(PENDING_REFERRAL_KEY);
+  localStorage.removeItem(PENDING_REFERRAL_BACKUP_KEY);
 }
 
 /** Record a deposit from a referred user toward their manager's stats. */
@@ -90,6 +96,17 @@ export function trackReferralDeposit(
   const manager = getUserById(managerId);
   if (!manager?.isManager) return null;
 
+  const ledger = readLedger();
+  if (
+    ledger.deposits.some(
+      (entry) =>
+        entry.transactionId === transactionId &&
+        entry.referredUserId === referredUserId,
+    )
+  ) {
+    return null;
+  }
+
   const commission =
     Math.round(amount * REFERRAL_COMMISSION_RATE * 100) / 100;
 
@@ -103,7 +120,6 @@ export function trackReferralDeposit(
     at: new Date().toISOString(),
   };
 
-  const ledger = readLedger();
   ledger.deposits.unshift(entry);
   writeLedger(ledger);
 

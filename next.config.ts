@@ -1,12 +1,20 @@
 import type { NextConfig } from "next";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 // BACKEND_URL is read at build time on Vercel. Set it in the project env
 // and redeploy if the API origin changes.
 const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
+const adminOnly = process.env.ADMIN_ONLY === "true";
 
 const nextConfig: NextConfig = {
+  // Separate build output so `npm run dev` and `npm run dev:admin` can run together.
+  distDir: adminOnly ? ".next-admin" : ".next",
+  // Prevent Next from using C:\Users\DELL\package-lock.json as the workspace root.
   turbopack: {
-    root: process.cwd(),
+    root: projectRoot,
   },
   async rewrites() {
     return [

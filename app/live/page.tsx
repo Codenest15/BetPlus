@@ -1,10 +1,4 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/PageHeader";
-import { MatchRow } from "@/components/MatchRow";
-import { getMatchesForPage } from "@/lib/catalog";
-import type { Match } from "@/lib/types";
+import { LiveContent } from "@/components/LiveContent";
 
 export default function LivePage() {
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);

@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PasswordField } from "@/components/auth/PasswordField";
+import { PhoneCountryInput } from "@/components/auth/PhoneCountryInput";
 import { adminLogin } from "@/lib/admin-store";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [phoneCountry, setPhoneCountry] = useState("GH");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,12 +18,12 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const ok = await adminLogin(email, password);
+    const ok = await adminLogin(phoneCountry, phone, password);
     setLoading(false);
     if (ok) {
       router.push("/admin");
     } else {
-      setError("Invalid admin credentials");
+      setError("Invalid phone number or password, or this account is not an admin.");
     }
   }
 
@@ -32,32 +35,27 @@ export default function AdminLoginPage() {
       >
         <h1 className="text-lg font-bold text-brand-dark">Admin login</h1>
         <p className="mt-1 text-xs text-muted">
-          Authorized staff only. Credentials are not stored in the app code.
+          Phone and password — only accounts marked admin in the database can sign in.
         </p>
 
-        <label className="mt-4 block">
-          <span className="mb-1 block text-[11px] text-muted">Email</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="username"
-            className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-brand"
-            required
+        <div className="mt-4">
+          <PhoneCountryInput
+            countryId={phoneCountry}
+            onCountryChange={setPhoneCountry}
+            phone={phone}
+            onPhoneChange={setPhone}
           />
-        </label>
+        </div>
 
-        <label className="mt-3 block">
-          <span className="mb-1 block text-[11px] text-muted">Password</span>
-          <input
-            type="password"
+        <div className="mt-3">
+          <PasswordField
+            label="Password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
             autoComplete="current-password"
-            className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-brand"
             required
           />
-        </label>
+        </div>
 
         {error && <p className="mt-2 text-xs text-live">{error}</p>}
 

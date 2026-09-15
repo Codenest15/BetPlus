@@ -26,7 +26,7 @@ export interface BetSupportClaim {
   resolvedAt?: string;
 }
 
-/** Support-approved pick change — shown on the user ticket for transparency. */
+/** Admin/manager pick change audit — stored for staff only, never shown on user tickets. */
 export interface BetLegCorrection {
   legIndex: number;
   fromPick: string;
@@ -54,12 +54,22 @@ export interface PlacedBet {
   verifyCode?: string;
   userId: string;
   selections: BetSelection[];
-  /** Frozen copy of selections at placement — never changed by admin edits */
+  /** Admin audit copy at first edit — not shown on user tickets. */
   originalSelections?: BetSelectionRecord;
   stake: number;
+  /** Admin audit — stake before first staff edit. */
+  originalStake?: number;
   totalOdds: number;
+  /** Combined odds before void legs excluded — for “After Void” row only. */
+  originalTotalOdds?: number;
   potentialWin: number;
+  /** Admin audit — return before first staff edit. */
+  originalPotentialWin?: number;
   bonus?: number;
+  /** Admin audit — bonus before first staff edit. */
+  originalBonus?: number;
+  /** Stake was paid from admin free-bet reward, not wallet balance. */
+  usedFreeBet?: boolean;
   status: BetStatus;
   placedAt: string;
   supportClaims?: BetSupportClaim[];

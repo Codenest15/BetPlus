@@ -11,25 +11,21 @@ import { backendBetToPlacedBet } from "@/lib/backend-mappers";
 import { deferEffect } from "@/lib/defer-effect";
 
 const TABS = [
-  { id: "sports", href: "/", label: "Sports", match: ["/"], icon: SportsIcon },
+  { id: "sports", href: "/", label: "Sports", match: ["/", "/scores"], icon: SportsIcon },
   {
-    id: "menu",
-    href: "/menu",
-    label: "AZ Menu",
-    match: [
-      "/menu",
-      "/virtual",
-      "/jackpot",
-      "/scores",
-      "/wallet",
-      "/promotions",
-      "/bet-history",
-      "/verify",
-      "/support",
-    ],
-    icon: MenuIcon,
+    id: "live",
+    href: "/live",
+    label: "Live",
+    match: ["/live"],
+    icon: LiveIcon,
   },
-  { id: "games", href: "/games", label: "Games", match: ["/games"], icon: GamesIcon },
+  {
+    id: "games",
+    href: "/games",
+    label: "Games",
+    match: ["/games", "/virtual", "/jackpot"],
+    icon: GamesIcon,
+  },
   {
     id: "open-bets",
     href: "/my-bets",
@@ -43,7 +39,7 @@ const TABS = [
     id: "me",
     href: "/account",
     label: "Me",
-    match: ["/account"],
+    match: ["/account", "/wallet", "/promotions", "/verify", "/support"],
     icon: MeIcon,
     requiresAuth: true,
   },
@@ -206,10 +202,11 @@ function SportsIcon({ active }: { active: boolean }) {
   );
 }
 
-function MenuIcon({ active }: { active: boolean }) {
+function LiveIcon({ active }: { active: boolean }) {
   return (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 2.2 : 1.6}>
-      <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
+      <circle cx="12" cy="12" r="4" fill={active ? "currentColor" : "none"} />
+      <path strokeLinecap="round" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
     </svg>
   );
 }

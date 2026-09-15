@@ -1,12 +1,16 @@
 import type { Match } from "@/lib/types";
-import { formatKickoff } from "@/lib/utils";
+import {
+  formatMatchDisplayId,
+  formatMatchStartTime,
+  formatKickoff,
+} from "@/lib/utils";
 import { OddsButton } from "./OddsButton";
 
 export function TopMatchCard({ match }: { match: Match }) {
   return (
     <article className="w-[180px] shrink-0 rounded-lg border border-border bg-surface p-2.5">
       <p className="mb-1.5 text-[10px] text-muted">
-        {formatKickoff(match.kickoff)} · {match.league}
+        {formatMatchStartTime(match.kickoff)} · ID {formatMatchDisplayId(match)}
       </p>
       <p className="truncate text-xs font-medium">{match.homeTeam}</p>
       <p className="mb-2 truncate text-xs font-medium">{match.awayTeam}</p>

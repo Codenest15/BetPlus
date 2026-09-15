@@ -1,29 +1,41 @@
 /** Server-only admin credentials — never import from client components. */
 
+import {
+  getStaffEmail,
+  getStaffPassword,
+  getStaffPhone,
+  isStaffPhoneLogin,
+} from "./staff-config";
+
 export const ADMIN_SESSION_COOKIE = "betplus_admin_auth";
 
 export function getAdminCredentials() {
-  const production = process.env.NODE_ENV === "production";
-  const backend = process.env.NEXT_PUBLIC_USE_BACKEND === "true";
-  if (production || backend) {
+  if (process.env.NODE_ENV === "production") {
     return {
-      email: (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase(),
-      password: process.env.ADMIN_PASSWORD ?? "",
+      phone: (process.env.ADMIN_PHONE ?? process.env.STAFF_PHONE ?? "").trim(),
+      password: process.env.ADMIN_PASSWORD ?? process.env.STAFF_PASSWORD ?? "",
+      email: (process.env.ADMIN_EMAIL ?? process.env.STAFF_EMAIL ?? "")
+        .trim()
+        .toLowerCase(),
     };
   }
-  const password =
-    process.env.ADMIN_PASSWORD ??
-    (process.env.NODE_ENV === "development" ? "admin123" : "");
+
   return {
-    email: (process.env.ADMIN_EMAIL ?? "admin@betplus.com").trim().toLowerCase(),
-    password,
+    phone: getStaffPhone(),
+    password: getStaffPassword(),
+    email: getStaffEmail(),
   };
 }
 
-export function verifyAdminCredentials(email: string, password: string): boolean {
-  const creds = getAdminCredentials();
-  if (!creds.email || !creds.password) return false;
-  return (
-    email.trim().toLowerCase() === creds.email && password === creds.password
-  );
+export function verifyAdminPhoneLogin(
+  phoneCountry: string,
+  phone: string,
+  password: string,
+): boolean {
+  if (process.env.NODE_ENV === "production") {
+    const creds = getAdminCredentials();
+    if (!creds.password || !creds.phone) return false;
+    return isStaffPhoneLogin(phoneCountry, phone, password);
+  }
+  return isStaffPhoneLogin(phoneCountry, phone, password);
 }

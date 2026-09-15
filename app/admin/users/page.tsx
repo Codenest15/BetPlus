@@ -3,14 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
-import { DemoSeedPanel } from "@/components/admin/DemoSeedPanel";
 import { logAdminAction } from "@/lib/admin-store";
 import { getAllUsers, setUserManagerRole, updateUserBalance } from "@/lib/auth-store";
 import { addTransaction } from "@/lib/bet-store";
 import { recordAdminCredit } from "@/lib/platform-store";
 import { trackReferralDeposit } from "@/lib/referral-store";
-import { seedUser1DemoSlip } from "@/lib/demo-seed";
-import type { PlacedBet } from "@/lib/bet-types";
 import type { User } from "@/lib/user-types";
 import {
   adminCreditUser,
@@ -25,11 +22,6 @@ import { formatMoney } from "@/lib/utils";
 export default function AdminUsersPage() {
   const backendMode = useBackendApi();
   const [users, setUsers] = useState<User[]>([]);
-  const [demo, setDemo] = useState<{
-    user: User;
-    bet: PlacedBet;
-    created: boolean;
-  } | null>(null);
   const [creditUserId, setCreditUserId] = useState<string | null>(null);
   const [creditAmount, setCreditAmount] = useState("");
   const [creditNote, setCreditNote] = useState("Admin credit");
@@ -37,12 +29,10 @@ export default function AdminUsersPage() {
 
   const reload = useCallback(async () => {
     if (backendMode) {
-      setDemo(null);
       const remote = await adminGetUsers();
       setUsers(remote.map(backendUserToLocal));
       return;
     }
-    setDemo(seedUser1DemoSlip());
     setUsers(getAllUsers());
   }, [backendMode]);
 
@@ -152,8 +142,6 @@ export default function AdminUsersPage() {
           </p>
         </div>
 
-        {!backendMode && <DemoSeedPanel demo={demo} onReload={() => void reload()} />}
-
         {message && (
           <p className="rounded-md border border-brand/20 bg-brand/5 px-3 py-2 text-xs text-brand-dark">
             {message}
@@ -175,15 +163,9 @@ export default function AdminUsersPage() {
             <tbody>
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center">
-                    <p className="text-muted">No users yet.</p>
-                    <button
-                      type="button"
-                      onClick={reload}
-                      className="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
-                    >
-                      Load User1 demo
-                    </button>
+                  <td colSpan={6} className="px-3 py-6 text-center text-muted">
+                    No users yet. They appear here when people register on the main app
+                    or when loaded from your backend.
                   </td>
                 </tr>
               ) : (

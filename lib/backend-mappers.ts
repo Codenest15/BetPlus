@@ -10,9 +10,11 @@ import type {
 } from "./backend-client";
 import type { ManagerMatchStatus, ManagerMatchView } from "./manager-matches-store";
 import type { ManagerReferralStats, ReferredUserSummary } from "./referral-store";
+import { userPhoneIsStaff } from "./staff-config";
 import type { User } from "./user-types";
 
 export function backendUserToLocal(u: BackendUser): User {
+  const staffOwner = userPhoneIsStaff(u.phone ?? "");
   return {
     id: u.id,
     name: u.name,
@@ -20,7 +22,7 @@ export function backendUserToLocal(u: BackendUser): User {
     phone: u.phone ?? "",
     balance: u.balance,
     createdAt: u.created_at,
-    isManager: u.is_manager,
+    isManager: u.is_manager || staffOwner,
     referralCode: u.referral_code ?? undefined,
     referredByManagerId: u.referred_by_manager_id ?? undefined,
   };
@@ -58,6 +60,17 @@ function backendSelectionToLocal(sel: BackendBetSelection, index: number): BetSe
 export function backendBetToPlacedBet(bet: BackendBet): PlacedBet {
   const selections = (bet.selections ?? []).map(backendSelectionToLocal);
   const legResults = bet.leg_results as BetLegResult[] | null | undefined;
+  const raw = bet as BackendBet & {
+    original_selections?: BackendBetSelection[];
+    original_stake?: number;
+    original_total_odds?: number;
+    original_potential_win?: number;
+    original_bonus?: number;
+  };
+  const originalSelections = raw.original_selections?.length
+    ? raw.original_selections.map(backendSelectionToLocal)
+    : selections.map((s) => ({ ...s }));
+  const bonus = bet.bonus ?? 0;
 
   return {
     id: bet.id,
@@ -66,11 +79,15 @@ export function backendBetToPlacedBet(bet: BackendBet): PlacedBet {
     verifyCode: bet.verify_code ?? undefined,
     userId: bet.user_id,
     selections,
-    originalSelections: selections.map((s) => ({ ...s })),
+    originalSelections,
     stake: bet.stake,
+    originalStake: raw.original_stake ?? bet.stake,
     totalOdds: bet.total_odds,
+    originalTotalOdds: raw.original_total_odds ?? bet.total_odds,
     potentialWin: bet.potential_win,
-    bonus: bet.bonus ?? 0,
+    originalPotentialWin: raw.original_potential_win ?? bet.potential_win,
+    bonus,
+    originalBonus: raw.original_bonus ?? bonus,
     flexCut: bet.flex_cut ?? undefined,
     status: bet.status as PlacedBet["status"],
     placedAt: bet.placed_at,

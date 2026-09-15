@@ -13,10 +13,12 @@ export function GameCard({
   compact = false,
   highlighted = false,
 }: GameCardProps) {
+  const href = game.href ?? "/games";
+
   if (compact) {
     return (
       <Link
-        href="/games"
+        href={href}
         className={`card card-hover flex w-[96px] shrink-0 flex-col items-center gap-1.5 p-2 transition-colors ${
           highlighted ? "border-brand/50 bg-brand/5" : ""
         }`}
@@ -31,7 +33,7 @@ export function GameCard({
 
   return (
     <Link
-      href="/games"
+      href={href}
       className={`card card-hover flex items-center gap-2.5 p-2.5 transition-colors ${
         highlighted ? "border-brand/50 bg-brand/5" : ""
       }`}

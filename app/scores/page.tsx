@@ -1,10 +1,4 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/PageHeader";
-import { getMatchesForPage } from "@/lib/catalog";
-import { formatKickoff } from "@/lib/utils";
-import type { Match } from "@/lib/types";
+import { ScoresContent } from "@/components/ScoresContent";
 
 export default function ScoresPage() {
   const [matches, setMatches] = useState<Match[]>([]);
