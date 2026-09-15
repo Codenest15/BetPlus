@@ -12,7 +12,8 @@ import {
 import {
   changePassword as apiChangePassword,
   fetchCurrentUser,
-  loginUser as apiLogin,
+  getAccessToken,
+  loginUserWithPhoneVariants as apiLogin,
   logoutUser as apiLogout,
   registerUser as apiRegister,
   setAccessToken,
@@ -201,7 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ): Promise<string | null> => {
       if (backendMode) {
         try {
-          await apiLogin({ identifier, password });
+          await apiLogin({ phoneCountry, phone, password });
           setAccessToken(null);
           await refreshUser();
           setAuthModal(null);
@@ -246,7 +247,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           clearPendingReferralCode();
           await apiLogin({
-            identifier: input.email,
+            phoneCountry: input.phoneCountry,
+            phone: input.phone,
             password: input.password,
             extraUsernames: [email],
           });
