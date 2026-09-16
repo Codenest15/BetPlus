@@ -173,39 +173,31 @@ export async function catalogEventsStep(
     return { events, source: "api" };
   }
 
-  const leagueIds = config.featuredLeagueIds;
-  if (leagueIds.length === 0) {
-    throw new Error("No featured leagues configured for catalog fetch");
-  }
-
-  let events = await fetchAllCatalogMatches(token);
-  if (sport && sport !== "all") {
-    events = events.filter((event) => event.sport === sport);
-  }
-
+  let events = await fetchAllCatalogMatches(token, { sport });
   return { events, source: "api" };
 }
 
-async function fetchAllCatalogMatches(token: string): Promise<Match[]> {
+async function fetchAllCatalogMatches(
+  token: string,
+  options?: { sport?: string },
+): Promise<Match[]> {
   const config = getCatalogApiConfig();
-  const batches = await Promise.all(
-    config.featuredLeagueIds.map((leagueId) =>
-      fetchMatchesForLeague(token, leagueId),
-    ),
-  );
-
-  const byExternalId = new Map<string, Match>();
-  for (const batch of batches) {
-    for (const [index, item] of batch.entries()) {
-      const match = normalizeCatalogGame(item, index);
-      byExternalId.set(match.id, match);
-    }
+  const qs = new URLSearchParams({ limit: "200" });
+  if (options?.sport && options.sport !== "all") {
+    qs.set("sport", options.sport);
   }
-
-  return [...byExternalId.values()].sort((a, b) => {
-    if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-    return new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
-  });
+  const res = await upstreamFetch(`${config.matchesPath}?${qs.toString()}`, token);
+  if (!res.ok) {
+    throw new Error(`Catalog matches failed (${res.status})`);
+  }
+  const body = (await res.json()) as RemoteCatalogGame[];
+  const list = Array.isArray(body) ? body : [];
+  return list
+    .map((item, index) => normalizeCatalogGame(item, index))
+    .sort((a, b) => {
+      if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+      return new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
+    });
 }
 
 /** Casino/virtual games for `/games` — not sports fixtures (those use `/catalog/events`). */

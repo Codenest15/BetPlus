@@ -1,9 +1,13 @@
 /** Server-only catalog API configuration (BetPlus backend). */
 
+const DEFAULT_BACKEND_URL = "http://localhost:8000";
 const DEFAULT_FEATURED_LEAGUES = "92,15,18,241,353,348,191,103";
 
 export function getCatalogApiConfig() {
-  const baseUrl = (process.env.CATALOG_API_URL ?? "").replace(/\/$/, "");
+  const baseUrl = (process.env.BACKEND_URL ?? DEFAULT_BACKEND_URL).replace(
+    /\/$/,
+    "",
+  );
   const authPath = process.env.CATALOG_API_AUTH_PATH ?? "";
 
   const featuredRaw =
