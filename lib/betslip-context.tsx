@@ -82,7 +82,7 @@ function r(n: number) {
 }
 
 export function BetSlipProvider({ children }: { children: ReactNode }) {
-  const { events } = useCatalog();
+  const { allEvents } = useCatalog();
   const [selections, setSelections] = useState<BetSelection[]>([]);
   const [stake, setStake] = useState(1);
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
@@ -264,12 +264,12 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (selections.length === 0 || events.length === 0) return;
+    if (selections.length === 0 || allEvents.length === 0) return;
 
     setSelections((prev) => {
       let changed = false;
       const next = prev.map((sel) => {
-        const match = events.find((e) => e.id === sel.matchId);
+        const match = allEvents.find((e) => e.id === sel.matchId);
         if (!match) return sel;
         const updated = resolveSelectionLiveOdds(match, sel);
         if (updated == null || updated === sel.odds) return sel;
@@ -278,7 +278,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       });
       return changed ? next : prev;
     });
-  }, [events, selections.length]);
+  }, [allEvents, selections.length]);
 
   const value = useMemo(
     () => ({

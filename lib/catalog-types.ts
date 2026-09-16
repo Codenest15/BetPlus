@@ -30,6 +30,19 @@ export interface CatalogPayload {
   steps: CatalogPipelineStep[];
 }
 
+export type CatalogListStatus = "live" | "upcoming" | "all";
+
+export type CatalogEventQuery = {
+  status?: CatalogListStatus;
+  sport?: string;
+  leagueId?: number;
+  date?: string;
+  search?: string;
+  windowDays?: number;
+  limit?: number;
+  offset?: number;
+};
+
 export type RemoteSport = {
   id?: number | string;
   name?: string;

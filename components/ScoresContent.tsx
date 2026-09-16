@@ -1,22 +1,63 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
-import {
-  getLiveFromCatalog,
-  getUpcomingFromCatalog,
-} from "@/lib/catalog-filters";
+import { fetchCatalogEvents } from "@/lib/catalog-client";
 import { useCatalog } from "@/lib/catalog-context";
+import type { Match } from "@/lib/types";
 import { formatMatchDisplayId, formatMatchStartTime } from "@/lib/utils";
 
 export function ScoresContent() {
-  const { loading, events } = useCatalog();
-  const live = getLiveFromCatalog(events);
-  const upcoming = getUpcomingFromCatalog(events).slice(0, 12);
+  const { error: catalogError, reload } = useCatalog();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [live, setLive] = useState<Match[]>([]);
+  const [upcoming, setUpcoming] = useState<Match[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      fetchCatalogEvents({ status: "live", limit: 30 }),
+      fetchCatalogEvents({ status: "upcoming", limit: 12 }),
+    ])
+      .then(([liveResult, upcomingResult]) => {
+        if (cancelled) return;
+        setLive(liveResult.events);
+        setUpcoming(upcomingResult.events);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load scores");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const message = error || catalogError;
 
   return (
     <div className="space-y-4">
       <PageHeader icon="live-scores" title="Scores" subtitle="Live and upcoming" />
+
+      {message && live.length === 0 && upcoming.length === 0 && (
+        <div className="space-y-2 py-6 text-center">
+          <p className="text-xs text-muted">{message}</p>
+          <button
+            type="button"
+            onClick={() => void reload()}
+            className="text-xs font-medium text-brand"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {!loading && live.length > 0 && (
         <section>
