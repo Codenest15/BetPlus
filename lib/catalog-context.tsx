@@ -6,104 +6,255 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import {
-  fetchCatalogLeagueEvents,
-  loadCatalogPipeline,
+  CATALOG_PAGE_SIZE,
+  fetchCatalogEvents,
+  loadCatalogBootstrap,
 } from "./catalog-client";
-import type { CatalogLeague, CatalogPayload } from "./catalog-types";
+import type {
+  CatalogEventQuery,
+  CatalogLeague,
+  CatalogPayload,
+} from "./catalog-types";
 import type { Match } from "./types";
+
+const LIVE_STALE_MS = 8_000;
+const LIST_STALE_MS = 45_000;
 
 interface CatalogContextValue {
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
   error: string | null;
   source: CatalogPayload["source"] | null;
   steps: CatalogPayload["steps"];
   sports: CatalogPayload["sports"];
   leagues: CatalogLeague[];
   events: Match[];
+  allEvents: Match[];
   loadingLeagueId: number | null;
   reload: () => Promise<void>;
+  loadEvents: (
+    query: CatalogEventQuery,
+    options?: { append?: boolean; force?: boolean },
+  ) => Promise<void>;
   loadLeagueEvents: (leagueId: number) => Promise<void>;
 }
 
 const CatalogContext = createContext<CatalogContextValue | null>(null);
 
-function mergeLeagueEvents(existing: Match[], leagueId: number, incoming: Match[]) {
-  const rest = existing.filter((event) => event.leagueId !== leagueId);
-  const byId = new Map<string, Match>();
-  for (const event of [...rest, ...incoming]) {
-    byId.set(event.id, event);
-  }
-  return [...byId.values()].sort((a, b) => {
-    if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-    return new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
+function viewKey(query: CatalogEventQuery) {
+  return JSON.stringify({
+    status: query.status ?? null,
+    sport: query.sport && query.sport !== "all" ? query.sport : null,
+    leagueId: query.leagueId ?? null,
+    date: query.date ?? null,
+    search: query.search?.trim() || null,
+    windowDays: query.windowDays ?? null,
   });
 }
 
-export function CatalogProvider({ children }: { children: ReactNode }) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [payload, setPayload] = useState<CatalogPayload | null>(null);
-  const [loadingLeagueId, setLoadingLeagueId] = useState<number | null>(null);
+function staleMs(query: CatalogEventQuery) {
+  return query.status === "live" ? LIVE_STALE_MS : LIST_STALE_MS;
+}
 
-  const reload = useCallback(async () => {
-    setLoading(true);
+type ViewCache = {
+  events: Match[];
+  hasMore: boolean;
+  fetchedAt: number;
+};
+
+function mergeMatches(existing: Match[], incoming: Match[]) {
+  const byId = new Map<string, Match>();
+  for (const event of [...existing, ...incoming]) {
+    byId.set(event.id, event);
+  }
+  return [...byId.values()];
+}
+
+export function CatalogProvider({ children }: { children: ReactNode }) {
+  const [bootLoading, setBootLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<CatalogPayload["source"] | null>(null);
+  const [steps, setSteps] = useState<CatalogPayload["steps"]>([]);
+  const [sports, setSports] = useState<CatalogPayload["sports"]>([]);
+  const [leagues, setLeagues] = useState<CatalogLeague[]>([]);
+  const [allEvents, setAllEvents] = useState<Match[]>([]);
+  const [activeKey, setActiveKey] = useState("");
+  const [loadingLeagueId, setLoadingLeagueId] = useState<number | null>(null);
+  const cacheRef = useRef<Map<string, ViewCache>>(new Map());
+  const matchesByIdRef = useRef<Map<string, Match>>(new Map());
+  const abortRef = useRef<AbortController | null>(null);
+  const [, setTick] = useState(0);
+
+  const bump = useCallback(() => setTick((n) => n + 1), []);
+
+  const events = useMemo(() => {
+    return cacheRef.current.get(activeKey)?.events ?? [];
+  }, [activeKey, loading, loadingMore, bootLoading]);
+
+  const hasMore = cacheRef.current.get(activeKey)?.hasMore ?? false;
+
+  const remember = useCallback((incoming: Match[]) => {
+    for (const event of incoming) {
+      matchesByIdRef.current.set(event.id, event);
+    }
+    setAllEvents([...matchesByIdRef.current.values()]);
+  }, []);
+
+  const bootstrap = useCallback(async () => {
+    setBootLoading(true);
     setError(null);
     try {
-      const data = await loadCatalogPipeline();
-      setPayload(data);
-    } catch {
-      setPayload({
-        source: "mock",
-        sports: [],
-        leagues: [],
-        events: [],
-        steps: [],
-      });
+      const data = await loadCatalogBootstrap();
+      setSource(data.source);
+      setSports(data.sports);
+      setLeagues(data.leagues);
+      setSteps(data.steps);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Catalog failed");
+      setSource("mock");
     } finally {
-      setLoading(false);
+      setBootLoading(false);
     }
   }, []);
 
-  const loadLeagueEvents = useCallback(async (leagueId: number) => {
-    setLoadingLeagueId(leagueId);
-    try {
-      const leagueEvents = await fetchCatalogLeagueEvents(leagueId);
-      setPayload((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          events: mergeLeagueEvents(prev.events, leagueId, leagueEvents),
-        };
-      });
-    } catch {
-      // Keep existing events — no user-facing error.
-    } finally {
-      setLoadingLeagueId((current) => (current === leagueId ? null : current));
+  const loadEvents = useCallback(
+    async (
+      query: CatalogEventQuery,
+      options?: { append?: boolean; force?: boolean },
+    ) => {
+      const key = viewKey(query);
+      const cached = cacheRef.current.get(key);
+      const append = options?.append === true;
+      const now = Date.now();
+
+      if (
+        !append &&
+        !options?.force &&
+        cached &&
+        now - cached.fetchedAt < staleMs(query)
+      ) {
+        setActiveKey(key);
+        setError(null);
+        bump();
+        return;
+      }
+
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setActiveKey(key);
+      setError(null);
+      if (append) setLoadingMore(true);
+      else setLoading(true);
+
+      try {
+        const offset = append ? (cached?.events.length ?? 0) : 0;
+        const result = await fetchCatalogEvents(
+          {
+            ...query,
+            limit: query.limit ?? CATALOG_PAGE_SIZE,
+            offset,
+          },
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        const events = append
+          ? mergeMatches(cached?.events ?? [], result.events)
+          : result.events;
+        cacheRef.current.set(key, {
+          events,
+          hasMore: result.hasMore,
+          fetchedAt: Date.now(),
+        });
+        remember(result.events);
+        if (result.source) setSource(result.source);
+        bump();
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        if (!cached) {
+          setError(err instanceof Error ? err.message : "Failed to load matches");
+        }
+      } finally {
+        if (abortRef.current === controller) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      }
+    },
+    [bump, remember],
+  );
+
+  const loadLeagueEvents = useCallback(
+    async (leagueId: number) => {
+      setLoadingLeagueId(leagueId);
+      try {
+        await loadEvents(
+          { leagueId, status: "upcoming", limit: CATALOG_PAGE_SIZE },
+          { force: true },
+        );
+      } finally {
+        setLoadingLeagueId((current) => (current === leagueId ? null : current));
+      }
+    },
+    [loadEvents],
+  );
+
+  const reload = useCallback(async () => {
+    cacheRef.current.clear();
+    await bootstrap();
+    if (activeKey) {
+      const parsed = JSON.parse(activeKey || "{}") as CatalogEventQuery;
+      await loadEvents(parsed, { force: true });
     }
-  }, []);
+  }, [activeKey, bootstrap, loadEvents]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    void bootstrap();
+    return () => abortRef.current?.abort();
+  }, [bootstrap]);
 
   const value = useMemo<CatalogContextValue>(() => {
     return {
-      loading,
+      loading: bootLoading || loading,
+      loadingMore,
+      hasMore,
       error,
-      source: payload?.source ?? null,
-      steps: payload?.steps ?? [],
-      sports: payload?.sports ?? [],
-      leagues: payload?.leagues ?? [],
-      events: payload?.events ?? [],
+      source,
+      steps,
+      sports,
+      leagues,
+      events,
+      allEvents,
       loadingLeagueId,
       reload,
+      loadEvents,
       loadLeagueEvents,
     };
-  }, [loading, error, payload, loadingLeagueId, reload, loadLeagueEvents]);
+  }, [
+    bootLoading,
+    loading,
+    loadingMore,
+    hasMore,
+    error,
+    source,
+    steps,
+    sports,
+    leagues,
+    events,
+    allEvents,
+    loadingLeagueId,
+    reload,
+    loadEvents,
+    loadLeagueEvents,
+  ]);
 
   return (
     <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>
@@ -116,4 +267,10 @@ export function useCatalog() {
     throw new Error("useCatalog must be used within CatalogProvider");
   }
   return ctx;
+}
+
+/** All matches seen this session — bet slip odds refresh. */
+export function useCatalogMatchIndex() {
+  const ctx = useContext(CatalogContext);
+  return ctx?.allEvents ?? [];
 }

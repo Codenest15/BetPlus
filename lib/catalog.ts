@@ -137,7 +137,8 @@ export async function fetchCatalogGames(options?: {
     qs.set("league_id", String(leagueId));
   }
   if (options?.sport) qs.set("sport", options.sport);
-  if (options?.live) qs.set("live", "true");
+  if (options?.live) qs.set("status", "live");
+  else if (options?.leagueId || options?.leagueSlug) qs.set("status", "upcoming");
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
   const res = await fetch(`${origin}/api/v1/catalog/games${suffix}`, {
     cache: "no-store",

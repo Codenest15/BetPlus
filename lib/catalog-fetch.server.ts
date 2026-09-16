@@ -8,7 +8,6 @@ import {
   mockCatalogGames,
   mockCatalogSports,
   normalizeCatalogGame,
-  normalizeGames,
   normalizeLeagues,
   normalizeSports,
 } from "./catalog-normalize";
@@ -130,24 +129,19 @@ export async function catalogLeaguesStep(
   return { leagues: normalizeLeagues(body, sportId), source: "api" };
 }
 
-async function fetchMatchesForLeague(
-  token: string,
-  leagueId: number,
-): Promise<RemoteCatalogGame[]> {
-  const config = getCatalogApiConfig();
-  const res = await upstreamFetch(
-    `${config.matchesPath}?league_id=${leagueId}`,
-    token,
-  );
-  if (!res.ok) return [];
-  const body = (await res.json()) as RemoteCatalogGame[];
-  return Array.isArray(body) ? body : [];
-}
-
 /** Step 3 — sports fixtures (BetPlus `/catalog/games`). */
 export async function catalogEventsStep(
   token: string,
-  options?: { sport?: string; leagueId?: number },
+  options?: {
+    sport?: string;
+    leagueId?: number;
+    status?: "live" | "upcoming" | "all";
+    date?: string;
+    search?: string;
+    windowDays?: number;
+    limit?: number;
+    offset?: number;
+  },
 ): Promise<{ events: Match[]; source: "api" | "mock" }> {
   const config = getCatalogApiConfig();
   const sport = options?.sport;
@@ -161,43 +155,37 @@ export async function catalogEventsStep(
     if (leagueId) {
       events = events.filter((event) => event.leagueId === leagueId);
     }
-    return { events, source: "mock" };
-  }
-
-  if (typeof leagueId === "number") {
-    const batch = await fetchMatchesForLeague(token, leagueId);
-    let events = batch.map((item, index) => normalizeCatalogGame(item, index));
-    if (sport && sport !== "all") {
-      events = events.filter((event) => event.sport === sport);
+    if (options?.status === "live") {
+      events = events.filter((event) => event.isLive);
+    } else if (options?.status === "upcoming" || options?.status === "all") {
+      events = events.filter((event) => !event.isLive);
     }
-    return { events, source: "api" };
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? events.length;
+    return { events: events.slice(offset, offset + limit), source: "mock" };
   }
 
-  let events = await fetchAllCatalogMatches(token, { sport });
-  return { events, source: "api" };
-}
+  const qs = new URLSearchParams();
+  const limit = options?.limit ?? 30;
+  qs.set("limit", String(limit));
+  if (options?.offset) qs.set("offset", String(options.offset));
+  if (sport && sport !== "all") qs.set("sport", sport);
+  if (typeof leagueId === "number") qs.set("league_id", String(leagueId));
+  if (options?.status) qs.set("status", options.status);
+  if (options?.date) qs.set("date", options.date);
+  if (options?.search) qs.set("search", options.search);
+  if (options?.windowDays) qs.set("window_days", String(options.windowDays));
 
-async function fetchAllCatalogMatches(
-  token: string,
-  options?: { sport?: string },
-): Promise<Match[]> {
-  const config = getCatalogApiConfig();
-  const qs = new URLSearchParams({ limit: "200" });
-  if (options?.sport && options.sport !== "all") {
-    qs.set("sport", options.sport);
-  }
   const res = await upstreamFetch(`${config.matchesPath}?${qs.toString()}`, token);
   if (!res.ok) {
     throw new Error(`Catalog matches failed (${res.status})`);
   }
   const body = (await res.json()) as RemoteCatalogGame[];
   const list = Array.isArray(body) ? body : [];
-  return list
-    .map((item, index) => normalizeCatalogGame(item, index))
-    .sort((a, b) => {
-      if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-      return new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
-    });
+  return {
+    events: list.map((item, index) => normalizeCatalogGame(item, index)),
+    source: "api",
+  };
 }
 
 /** Casino/virtual games for `/games` — not sports fixtures (those use `/catalog/events`). */

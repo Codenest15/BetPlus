@@ -93,6 +93,10 @@ export async function fetchCatalogMatchesForLeague(leagueId: number) {
   const config = getCatalogApiConfig();
   if (!config.enabled) return [];
 
-  const { events } = await catalogEventsStep("public", { leagueId });
+  const { events } = await catalogEventsStep("public", {
+    leagueId,
+    status: "upcoming",
+    limit: 100,
+  });
   return events;
 }
