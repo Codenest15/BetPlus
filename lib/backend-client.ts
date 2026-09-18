@@ -57,12 +57,17 @@ export function formatApiErrorDetail(data: unknown, fallback: string): string {
   if (typeof data !== "object" || !data || !("detail" in data)) return fallback;
   const detail = (data as { detail: unknown }).detail;
   if (typeof detail === "string" && detail.trim()) return detail;
-  if (detail && typeof detail === "object" && "code" in detail) {
-    const code = String((detail as { code: unknown }).code);
-    if (code === "ODDS_CHANGED") {
+  if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+    const rec = detail as { message?: unknown; code?: unknown };
+    if (typeof rec.message === "string" && rec.message.trim()) {
+      return rec.message.trim();
+    }
+    if (rec.code === "ODDS_CHANGED") {
       return "Odds changed. Review the updated selections and place the bet again to accept them.";
     }
-    return code;
+    if (rec.code != null && String(rec.code).trim()) {
+      return String(rec.code);
+    }
   }
   if (Array.isArray(detail)) {
     const parts = detail
@@ -82,6 +87,43 @@ export function formatApiErrorDetail(data: unknown, fallback: string): string {
     if (parts.length) return parts.join("; ");
   }
   return fallback;
+}
+
+export function paymentErrorReference(data: unknown): string | undefined {
+  if (typeof data !== "object" || !data || !("detail" in data)) return undefined;
+  const detail = (data as { detail: unknown }).detail;
+  if (!detail || typeof detail !== "object" || Array.isArray(detail)) return undefined;
+  const reference = (detail as { reference?: unknown }).reference;
+  if (typeof reference === "string" && reference.trim()) return reference.trim();
+  return undefined;
+}
+
+export function formatPaymentUserError(
+  err: unknown,
+  action: "deposit" | "withdrawal" = "deposit",
+): string {
+  const fallback =
+    action === "withdrawal"
+      ? "Withdrawal could not be initiated."
+      : "Payment could not be initiated.";
+  if (!(err instanceof ApiError)) {
+    return err instanceof Error && err.message.trim() ? err.message : fallback;
+  }
+  let reason = formatApiErrorDetail(err.body, "");
+  if (
+    !reason ||
+    reason === "Bad Request" ||
+    reason === "Request failed"
+  ) {
+    reason =
+      err.message && err.message !== "Bad Request" && err.message !== "Request failed"
+        ? err.message
+        : "The payment provider could not start this payment.";
+  }
+  const reference = paymentErrorReference(err.body);
+  const parts = [`${fallback} Reason: ${reason}`];
+  if (reference) parts.push(`Reference: ${reference}`);
+  return parts.join(" ");
 }
 
 export async function apiRequest<T>(
@@ -243,7 +285,12 @@ export async function initiateDeposit(
   }>("/api/v1/payments/deposits", {
     method: "POST",
     headers,
-    body: JSON.stringify({ amount, channel, phone, payer_phone: phone }),
+    body: JSON.stringify({
+      amount,
+      channel,
+      phone,
+      payer_phone: phone,
+    }),
   });
 }
 
