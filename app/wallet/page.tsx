@@ -1,19 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { addTransaction, getTransactionsByUser } from "@/lib/bet-store";
 import { recordUserDeposit, recordUserWithdrawal } from "@/lib/platform-store";
 import { trackReferralDeposit } from "@/lib/referral-store";
 import { updateUserBalance } from "@/lib/auth-store";
 import {
-  ApiError,
   initiateDeposit,
   initiateWithdrawal,
   getPaymentStatus,
   getTransactions as apiGetTransactions,
   useBackendApi,
+  formatPaymentUserError,
 } from "@/lib/backend-client";
 import { backendTransactionToLocal } from "@/lib/backend-mappers";
 import type { Transaction } from "@/lib/bet-types";
@@ -50,19 +50,35 @@ import { deferEffect } from "@/lib/defer-effect";
 const WITHDRAW_AMOUNTS = [20, 50, 100, 200];
 const PAYMENT_POLL_MS = 3000;
 const PAYMENT_POLL_ATTEMPTS = 20;
+const PAYMENT_PENDING_STATUSES = new Set(["pending", "processing"]);
+const PAYMENT_FAILURE_STATUSES = new Set([
+  "failed",
+  "cancelled",
+  "expired",
+  "reversed",
+]);
 
 async function waitForPaymentStatus(
   reference: string,
+  signal?: AbortSignal,
 ): Promise<Awaited<ReturnType<typeof getPaymentStatus>>> {
   let latest = await getPaymentStatus(reference);
   for (let attempt = 0; attempt < PAYMENT_POLL_ATTEMPTS; attempt += 1) {
-    if (
-      latest.status !== "pending" &&
-      latest.status !== "processing"
-    ) {
+    if (signal?.aborted || !PAYMENT_PENDING_STATUSES.has(latest.status)) {
       return latest;
     }
-    await new Promise((resolve) => window.setTimeout(resolve, PAYMENT_POLL_MS));
+    await new Promise<void>((resolve) => {
+      const timer = window.setTimeout(resolve, PAYMENT_POLL_MS);
+      signal?.addEventListener(
+        "abort",
+        () => {
+          window.clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+    if (signal?.aborted) return latest;
     latest = await getPaymentStatus(reference);
   }
   return latest;
@@ -135,6 +151,14 @@ export default function WalletPage() {
   const [txLoading, setTxLoading] = useState(false);
   const [txError, setTxError] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const pollAbortRef = useRef<AbortController | null>(null);
+
+  function paymentPollSignal() {
+    pollAbortRef.current?.abort();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    return controller.signal;
+  }
 
   const loadTransactions = useCallback(async () => {
     if (!user || !backendMode) return;
@@ -170,6 +194,12 @@ export default function WalletPage() {
       setAmount((prev) => (prev < min ? defaultDepositAmount(market) : prev));
     });
   }, [user?.phone]);
+
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
 
   if (!user) {
     return (
@@ -230,13 +260,16 @@ export default function WalletPage() {
           crypto.randomUUID(),
         );
         if (payment.authorization_url) {
-          window.location.href = payment.authorization_url;
+          window.location.assign(payment.authorization_url);
           return true;
         }
         if (payment.status !== "completed") {
           setMessage("Check your phone and approve the payment");
-          const latest = await waitForPaymentStatus(payment.provider_ref);
-          if (latest.status === "failed" || latest.status === "cancelled" || latest.status === "expired") {
+          const latest = await waitForPaymentStatus(
+            payment.provider_ref,
+            paymentPollSignal(),
+          );
+          if (PAYMENT_FAILURE_STATUSES.has(latest.status)) {
             setError(`Deposit ${formatMoney(amount)} ${latest.status}`);
             setMessage("");
             return false;
@@ -259,7 +292,7 @@ export default function WalletPage() {
         setMessage(`Deposited ${formatMoney(amount)} successfully`);
         return true;
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Deposit failed");
+        setError(formatPaymentUserError(err, "deposit"));
         return false;
       } finally {
         setSubmitting(false);
@@ -391,10 +424,13 @@ export default function WalletPage() {
         await loadTransactions();
         if (payment.status === "pending" || payment.status === "processing") {
           setMessage("Withdrawal submitted. Waiting for confirmation.");
-          const latest = await waitForPaymentStatus(payment.provider_ref);
+          const latest = await waitForPaymentStatus(
+            payment.provider_ref,
+            paymentPollSignal(),
+          );
           await refreshUser();
           await loadTransactions();
-          if (latest.status === "failed" || latest.status === "reversed") {
+          if (PAYMENT_FAILURE_STATUSES.has(latest.status)) {
             setError(`Withdrawal ${formatMoney(amount)} ${latest.status}`);
             setMessage("");
             return;
@@ -412,7 +448,7 @@ export default function WalletPage() {
             : `Withdrawal of ${formatMoney(amount)} is pending confirmation`,
         );
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Withdrawal failed");
+        setError(formatPaymentUserError(err, "withdrawal"));
       } finally {
         setSubmitting(false);
       }
