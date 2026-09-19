@@ -275,6 +275,27 @@ export interface BackendPaymentIntent {
   amount: number;
   authorization_url: string | null;
   otp_required?: boolean;
+  next_action?: string | null;
+}
+
+export function paymentNeedsOtp(payment: {
+  otp_required?: boolean;
+  next_action?: string | null;
+}): boolean {
+  return payment.otp_required === true || payment.next_action === "otp";
+}
+
+export function paymentOtpErrorReference(err: unknown): string | undefined {
+  if (!(err instanceof ApiError)) return undefined;
+  const reference = paymentErrorReference(err.body);
+  const reason = formatApiErrorDetail(err.body, err.message).toLowerCase();
+  const otpFailure =
+    reason.includes("verification") ||
+    reason.includes("otp") ||
+    reason.includes("sms") ||
+    reason.includes("tp14");
+  if (reference && otpFailure) return reference;
+  return undefined;
 }
 
 export async function initiateDeposit(
@@ -329,20 +350,17 @@ export async function initiateWithdrawal(
 }
 
 export async function getPaymentStatus(reference: string) {
-  return apiRequest<{
-    id: string;
-    user_id: string;
-    provider: string;
-    kind: string;
-    provider_ref: string;
-    amount: number;
-    currency: string;
-    status: string;
-    channel: string | null;
-    authorization_url: string | null;
-    created_at: string | null;
-    completed_at: string | null;
-  }>(`/api/v1/payments/${encodeURIComponent(reference)}`);
+  return apiRequest<
+    BackendPaymentIntent & {
+      user_id: string;
+      provider: string;
+      kind: string;
+      currency: string;
+      channel: string | null;
+      created_at: string | null;
+      completed_at: string | null;
+    }
+  >(`/api/v1/payments/${encodeURIComponent(reference)}`);
 }
 
 export async function withdraw(amount: number, description = "") {
