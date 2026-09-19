@@ -268,6 +268,15 @@ export async function logoutUser(): Promise<void> {
   await apiRequest<void>("/api/v1/auth/logout", { method: "POST" });
 }
 
+export interface BackendPaymentIntent {
+  id: string;
+  provider_ref: string;
+  status: string;
+  amount: number;
+  authorization_url: string | null;
+  otp_required?: boolean;
+}
+
 export async function initiateDeposit(
   amount: number,
   channel = "mobile_money",
@@ -276,13 +285,7 @@ export async function initiateDeposit(
 ) {
   const headers: HeadersInit = {};
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
-  return apiRequest<{
-    id: string;
-    provider_ref: string;
-    status: string;
-    amount: number;
-    authorization_url: string | null;
-  }>("/api/v1/payments/deposits", {
+  return apiRequest<BackendPaymentIntent>("/api/v1/payments/deposits", {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -292,6 +295,16 @@ export async function initiateDeposit(
       payer_phone: phone,
     }),
   });
+}
+
+export async function confirmPaymentOtp(reference: string, otpcode: string) {
+  return apiRequest<BackendPaymentIntent>(
+    `/api/v1/payments/${encodeURIComponent(reference)}/otp`,
+    {
+      method: "POST",
+      body: JSON.stringify({ otpcode }),
+    },
+  );
 }
 
 export async function initiateWithdrawal(
