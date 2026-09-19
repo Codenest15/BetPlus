@@ -16,6 +16,12 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: projectRoot,
   },
+  async redirects() {
+    return [
+      { source: "/deposit/:path*", destination: "/wallet", permanent: false },
+      { source: "/deposite/:path*", destination: "/wallet", permanent: false },
+    ];
+  },
   async rewrites() {
     return [
       {

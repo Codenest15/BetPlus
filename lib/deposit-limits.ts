@@ -1,12 +1,12 @@
 import { digitsOnly } from "./phone-countries";
 
-export const MIN_DEPOSIT_GHS = 250;
-export const MIN_DEPOSIT_USD = 20;
+export const MIN_DEPOSIT_GHS = 1;
+export const MIN_DEPOSIT_USD = 1;
 
 export type WalletDepositMarket = "ghana" | "international";
 
-const GH_QUICK_AMOUNTS = [250, 500, 1000, 2000];
-const INTL_QUICK_AMOUNTS = [20, 50, 100, 200];
+const GH_QUICK_AMOUNTS = [1, 5, 10, 50, 100];
+const INTL_QUICK_AMOUNTS = [1, 5, 10, 50, 100];
 
 /** Ghana numbers vs Nigeria / other (USD minimum). */
 export function walletDepositMarket(phone: string | undefined): WalletDepositMarket {
@@ -27,7 +27,7 @@ export function minDepositAmount(market: WalletDepositMarket): number {
 export function depositQuickAmounts(market: WalletDepositMarket): number[] {
   const min = minDepositAmount(market);
   const list = market === "ghana" ? GH_QUICK_AMOUNTS : INTL_QUICK_AMOUNTS;
-  return list.filter((a) => a >= min);
+  return list.filter((a) => a >= min - 1e-9);
 }
 
 export function defaultDepositAmount(market: WalletDepositMarket): number {
@@ -46,30 +46,39 @@ export function validateDepositAmount(
     return "Enter a valid amount.";
   }
   const min = minDepositAmount(market);
-  if (market === "ghana") {
-    if (amount < min) {
-      return `Minimum deposit is GH₵${min.toLocaleString("en-GH")}.`;
-    }
-    return null;
-  }
-  if (amount < min) {
-    return `Minimum deposit is $${min}.`;
+  if (amount + 1e-9 < min) {
+    return market === "ghana"
+      ? `Minimum deposit is GH₵${min.toFixed(2)}.`
+      : `Minimum deposit is $${min.toFixed(2)}.`;
   }
   return null;
+}
+
+/** Parse free-typed amount field (empty → NaN). */
+export function parseAmountInput(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return Number.NaN;
+  return Number.parseFloat(trimmed);
+}
+
+export function formatAmountInputValue(amount: number): string {
+  if (!Number.isFinite(amount)) return "";
+  return String(amount);
 }
 
 export function formatDepositAmount(
   amount: number,
   market: WalletDepositMarket,
 ): string {
+  const fractionDigits = amount < 1 ? 2 : amount % 1 === 0 ? 0 : 2;
   if (market === "ghana") {
     return `GH₵${amount.toLocaleString("en-GH", {
-      minimumFractionDigits: 0,
+      minimumFractionDigits: fractionDigits,
       maximumFractionDigits: 2,
     })}`;
   }
   return `$${amount.toLocaleString("en-US", {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: fractionDigits,
     maximumFractionDigits: 2,
   })}`;
 }

@@ -303,6 +303,8 @@ export async function initiateDeposit(
   channel = "mobile_money",
   phone?: string,
   idempotencyKey?: string,
+  /** Moolre network code (MTN, TELECEL, AT) — sent as `destination` for the API. */
+  momoProviderChannel?: string,
 ) {
   const headers: HeadersInit = {};
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
@@ -314,6 +316,7 @@ export async function initiateDeposit(
       channel,
       phone,
       payer_phone: phone,
+      destination: momoProviderChannel ?? undefined,
     }),
   });
 }
@@ -334,9 +337,11 @@ export async function initiateWithdrawal(
   destination?: string,
   phone?: string,
   idempotencyKey?: string,
+  momoProviderChannel?: string,
 ) {
   const headers: HeadersInit = {};
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+  const payoutDestination = momoProviderChannel ?? destination;
   return apiRequest<{
     id: string;
     provider_ref: string;
@@ -345,22 +350,69 @@ export async function initiateWithdrawal(
   }>("/api/v1/payments/withdrawals", {
     method: "POST",
     headers,
-    body: JSON.stringify({ amount, channel, destination, phone }),
+    body: JSON.stringify({
+      amount,
+      channel,
+      destination: payoutDestination,
+      phone,
+      payer_phone: phone,
+    }),
   });
 }
 
+export type PaymentIntent = BackendPaymentIntent & {
+  user_id?: string;
+  provider?: string;
+  kind?: string;
+  currency?: string;
+  channel?: string | null;
+  created_at?: string | null;
+  completed_at?: string | null;
+};
+
 export async function getPaymentStatus(reference: string) {
-  return apiRequest<
-    BackendPaymentIntent & {
-      user_id: string;
-      provider: string;
-      kind: string;
-      currency: string;
-      channel: string | null;
-      created_at: string | null;
-      completed_at: string | null;
+  return apiRequest<PaymentIntent>(
+    `/api/v1/payments/${encodeURIComponent(reference)}`,
+  );
+}
+
+const TERMINAL_PAYMENT_STATUSES = new Set([
+  "failed",
+  "cancelled",
+  "expired",
+  "reversed",
+]);
+
+export function isTerminalPaymentFailure(status: string): boolean {
+  return TERMINAL_PAYMENT_STATUSES.has(status.toLowerCase());
+}
+
+/** API may expect internal payment id or provider reference in the OTP path. */
+export async function confirmDepositOtpForPayment(
+  payment: Pick<PaymentIntent, "id" | "provider_ref">,
+  otpcode: string,
+): Promise<PaymentIntent> {
+  const code = otpcode.trim();
+  try {
+    return await confirmPaymentOtp(payment.id, code);
+  } catch (first) {
+    if (
+      first instanceof ApiError &&
+      payment.provider_ref &&
+      payment.provider_ref !== payment.id &&
+      (first.status === 404 || first.status === 422)
+    ) {
+      return confirmPaymentOtp(payment.provider_ref, code);
     }
-  >(`/api/v1/payments/${encodeURIComponent(reference)}`);
+    throw first;
+  }
+}
+
+export async function depositWallet(amount: number, description = "") {
+  return apiRequest<BackendTransaction>("/api/v1/wallet/deposit", {
+    method: "POST",
+    body: JSON.stringify({ amount, description }),
+  });
 }
 
 export async function withdraw(amount: number, description = "") {
