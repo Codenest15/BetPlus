@@ -10,6 +10,7 @@ import { updateUserBalance } from "@/lib/auth-store";
 import {
   initiateDeposit,
   initiateWithdrawal,
+  confirmPaymentOtp,
   getPaymentStatus,
   getTransactions as apiGetTransactions,
   useBackendApi,
@@ -151,6 +152,8 @@ export default function WalletPage() {
   const [txLoading, setTxLoading] = useState(false);
   const [txError, setTxError] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [otpReference, setOtpReference] = useState("");
+  const [otpCode, setOtpCode] = useState("");
   const pollAbortRef = useRef<AbortController | null>(null);
 
   function paymentPollSignal() {
@@ -237,6 +240,61 @@ export default function WalletPage() {
     setError("");
   }
 
+  function resetOtpStep() {
+    setOtpReference("");
+    setOtpCode("");
+  }
+
+  function maskedPhone() {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 4) return "your phone";
+    return `••${digits.slice(-4)}`;
+  }
+
+  async function finishDeposit(payment: {
+    provider_ref: string;
+    status: string;
+    authorization_url?: string | null;
+    otp_required?: boolean;
+  }) {
+    if (payment.otp_required) {
+      setOtpReference(payment.provider_ref);
+      setOtpCode("");
+      setMessage(
+        `Enter the SMS verification code sent to ${maskedPhone()}, then approve the Mobile Money prompt.`,
+      );
+      return true;
+    }
+    if (payment.authorization_url) {
+      window.location.assign(payment.authorization_url);
+      return true;
+    }
+    if (payment.status !== "completed") {
+      setMessage("Check your phone and approve the payment");
+      const latest = await waitForPaymentStatus(
+        payment.provider_ref,
+        paymentPollSignal(),
+      );
+      if (PAYMENT_FAILURE_STATUSES.has(latest.status)) {
+        setError(`Deposit ${formatMoney(amount)} ${latest.status}`);
+        setMessage("");
+        return false;
+      }
+      if (latest.status !== "completed") {
+        setMessage(
+          `Deposit ${formatMoney(amount)} is pending. Approve the prompt on your phone; your balance updates after confirmation.`,
+        );
+        return true;
+      }
+    }
+    await refreshUser();
+    await loadTransactions();
+    setCryptoStep(false);
+    resetOtpStep();
+    setMessage(`Deposited ${formatMoney(amount)} successfully`);
+    return true;
+  }
+
   async function creditWallet(description: string) {
     const depositError = validateDepositAmount(amount, depositMarket);
     if (depositError) {
@@ -259,38 +317,7 @@ export default function WalletPage() {
           phone,
           crypto.randomUUID(),
         );
-        if (payment.authorization_url) {
-          window.location.assign(payment.authorization_url);
-          return true;
-        }
-        if (payment.status !== "completed") {
-          setMessage("Check your phone and approve the payment");
-          const latest = await waitForPaymentStatus(
-            payment.provider_ref,
-            paymentPollSignal(),
-          );
-          if (PAYMENT_FAILURE_STATUSES.has(latest.status)) {
-            setError(`Deposit ${formatMoney(amount)} ${latest.status}`);
-            setMessage("");
-            return false;
-          }
-          if (latest.status !== "completed") {
-            setMessage(
-              `Deposit ${formatMoney(amount)} is pending. Approve the prompt on your phone; your balance updates after confirmation.`,
-            );
-            return true;
-          }
-          await refreshUser();
-          await loadTransactions();
-          setCryptoStep(false);
-          setMessage(`Deposited ${formatMoney(amount)} successfully`);
-          return true;
-        }
-        await refreshUser();
-        await loadTransactions();
-        setCryptoStep(false);
-        setMessage(`Deposited ${formatMoney(amount)} successfully`);
-        return true;
+        return finishDeposit(payment);
       } catch (err) {
         setError(formatPaymentUserError(err, "deposit"));
         return false;
@@ -333,9 +360,32 @@ export default function WalletPage() {
     return true;
   }
 
+  async function handleVerifyOtp() {
+    resetMessages();
+    if (submitting || !otpReference) return;
+    const digits = otpCode.replace(/\D/g, "");
+    if (digits.length < 4) {
+      setError("Enter the SMS verification code");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const payment = await confirmPaymentOtp(otpReference, digits);
+      await finishDeposit(payment);
+    } catch (err) {
+      setError(formatPaymentUserError(err, "deposit"));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleDeposit() {
     resetMessages();
     if (submitting) return;
+    if (otpReference) {
+      await handleVerifyOtp();
+      return;
+    }
     const depositError = validateDepositAmount(amount, depositMarket);
     if (depositError) {
       setError(depositError);
@@ -493,6 +543,7 @@ export default function WalletPage() {
             onClick={() => {
               setTab(t);
               setCryptoStep(false);
+              resetOtpStep();
               resetMessages();
             }}
             className={`flex-1 rounded-md py-1.5 text-xs font-medium capitalize transition-colors ${
@@ -524,6 +575,7 @@ export default function WalletPage() {
                         setWithdrawMethod(method.id as WithdrawMethod);
                       }
                       setCryptoStep(false);
+                      resetOtpStep();
                       resetMessages();
                     }}
                     className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
@@ -600,11 +652,52 @@ export default function WalletPage() {
                   className="w-full rounded-md border border-border/80 bg-surface-elevated px-3 py-2 text-sm outline-none focus:border-brand"
                 />
               </label>
-              {tab === "deposit" && (
+              {tab === "deposit" && !otpReference && (
                 <p className="text-[10px] leading-snug text-muted">
                   You will receive a prompt on your phone to approve the payment.
+                  A one-time SMS code may be required first.
                 </p>
               )}
+            </div>
+          )}
+
+          {tab === "deposit" && otpReference && activeMethod === "mobile-money" && (
+            <div className="card space-y-3 border-brand-soft bg-brand-light/40 p-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Enter SMS code
+                </p>
+                <p className="mt-0.5 text-[10px] leading-snug text-muted">
+                  Moolre sent an online verification code to {maskedPhone()}. This
+                  is not the Mobile Money prompt yet.
+                </p>
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-[11px] text-muted">
+                  Verification code
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="6-digit code"
+                  value={otpCode}
+                  onChange={(e) =>
+                    setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 10))
+                  }
+                  className="w-full rounded-md border border-border/80 bg-surface-elevated px-3 py-2 font-mono text-sm tracking-wider outline-none focus:border-brand"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  resetOtpStep();
+                  resetMessages();
+                }}
+                className="text-[11px] font-medium text-brand hover:underline"
+              >
+                Start over
+              </button>
             </div>
           )}
 
@@ -865,13 +958,15 @@ export default function WalletPage() {
             {submitting
               ? "Processing..."
               : tab === "deposit"
-                ? cryptoStep && (depositMethod === "btc" || depositMethod === "usdt")
-                  ? "I have sent payment"
-                  : depositMethod === "mobile-money"
-                    ? "Pay with Mobile Money"
-                    : depositMethod === "visa"
-                      ? "Pay with Visa"
-                      : "Continue"
+                ? otpReference
+                  ? "Verify and continue"
+                  : cryptoStep && (depositMethod === "btc" || depositMethod === "usdt")
+                    ? "I have sent payment"
+                    : depositMethod === "mobile-money"
+                      ? "Pay with Mobile Money"
+                      : depositMethod === "visa"
+                        ? "Pay with Visa"
+                        : "Continue"
                 : "Withdraw"}
           </button>
         </>
