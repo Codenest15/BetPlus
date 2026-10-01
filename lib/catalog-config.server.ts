@@ -1,6 +1,6 @@
 /** Server-only catalog API configuration (BetPlus backend). */
 
-const DEFAULT_BACKEND_URL = "http://localhost:8000";
+const DEFAULT_BACKEND_URL = "https://betplus-d8a60016f77b.herokuapp.com/";
 const DEFAULT_FEATURED_LEAGUES = "92,15,18,241,353,348,191,103";
 
 export function getCatalogApiConfig() {

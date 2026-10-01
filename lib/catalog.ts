@@ -40,7 +40,7 @@ interface BackendCatalogLeague {
 
 function catalogOrigin(): string {
   if (typeof window === "undefined") {
-    return process.env.BACKEND_URL ?? "http://localhost:8000";
+    return process.env.BACKEND_URL ?? "https://betplus-d8a60016f77b.herokuapp.com/";
   }
   return "";
 }

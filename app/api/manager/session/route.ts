@@ -7,7 +7,7 @@ import {
 import { userPhoneIsStaff } from "@/lib/staff-config";
 
 async function fetchBackendUser(accessToken: string) {
-  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
+  const backendUrl = process.env.BACKEND_URL ?? "https://betplus-d8a60016f77b.herokuapp.com/";
   const me = await fetch(`${backendUrl}/api/v1/auth/me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
