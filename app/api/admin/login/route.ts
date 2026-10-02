@@ -11,7 +11,7 @@ async function tryFastApiAdminLogin(
   username: string,
   password: string,
 ): Promise<string | null> {
-  const backendUrl = process.env.BACKEND_URL ?? "https://betplus-d8a60016f77b.herokuapp.com/";
+  const backendUrl = process.env.BACKEND_URL ?? "https://betplus-d8a60016f77b.herokuapp.com";
   try {
     const data = new URLSearchParams();
     data.append("username", username);
@@ -39,7 +39,7 @@ async function tryFastApiLogin(
   username: string,
   password: string,
 ): Promise<string | null> {
-  const backendUrl = process.env.BACKEND_URL ?? "https://betplus-d8a60016f77b.herokuapp.com/";
+  const backendUrl = process.env.BACKEND_URL ?? "https://betplus-d8a60016f77b.herokuapp.com";
   try {
     const data = new URLSearchParams();
     data.append("username", username);

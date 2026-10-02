@@ -6,7 +6,7 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 // BACKEND_URL is read at build time on Vercel. Set it in the project env
 // and redeploy if the API origin changes.
-const backendUrl = process.env.BACKEND_URL ?? "https://betplus-d8a60016f77b.herokuapp.com/";
+const backendUrl = process.env.BACKEND_URL ?? "https://betplus-d8a60016f77b.herokuapp.com";
 const adminOnly = process.env.ADMIN_ONLY === "true";
 
 const nextConfig: NextConfig = {
