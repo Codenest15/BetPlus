@@ -86,32 +86,12 @@ export const USDT_NETWORKS: { id: UsdtNetwork; label: string; fee: string }[] = 
   { id: "erc20", label: "ERC20", fee: "Standard" },
 ];
 
-/** Demo deposit addresses — replace with live gateway in production */
-export const CRYPTO_DEPOSIT_ADDRESSES = {
-  btc: "bc1qbetplus7xk9demo4ghana2wallet0address",
-  usdt: {
-    trc20: "TBetPlusDemoUSDT9Trc20GhanaWalletAddr",
-    erc20: "0xBetPlusDemoUSDT9Erc20GhanaWalletAddr",
-  },
-} as const;
-
 export function mobileNetworkLabel(id: MobileNetwork) {
   return MOBILE_NETWORKS.find((n) => n.id === id)?.label ?? id;
 }
 
 export function depositMethodLabel(id: DepositMethod) {
   return DEPOSIT_METHODS.find((m) => m.id === id)?.label ?? id;
-}
-
-export function getCryptoDepositAddress(method: "btc" | "usdt", usdtNetwork: UsdtNetwork) {
-  if (method === "btc") return CRYPTO_DEPOSIT_ADDRESSES.btc;
-  return CRYPTO_DEPOSIT_ADDRESSES.usdt[usdtNetwork];
-}
-
-export function estimateCryptoAmount(ghsAmount: number, method: "btc" | "usdt") {
-  const rate = method === "btc" ? 0.000014 : 0.065;
-  const value = ghsAmount * rate;
-  return method === "btc" ? value.toFixed(8) : value.toFixed(2);
 }
 
 export function formatCardNumber(value: string) {

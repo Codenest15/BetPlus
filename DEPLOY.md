@@ -81,6 +81,12 @@ heroku config:set MOOLRE_API_KEY=...
 heroku config:set MOOLRE_ACCOUNT_NUMBER=...
 heroku config:set MOOLRE_WEBHOOK_SECRET=...
 heroku config:set PAYMENT_CURRENCY=GHS
+heroku config:set NOWPAYMENTS_ENABLED=false
+heroku config:set NOWPAYMENTS_API_KEY=...
+heroku config:set NOWPAYMENTS_BASE_URL=https://api.sandbox.nowpayments.io
+heroku config:set NOWPAYMENTS_IPN_SECRET=...
+heroku config:set NOWPAYMENTS_IPN_CALLBACK_URL=https://api.yourdomain.com/api/v1/payments/webhooks/nowpayments
+heroku config:set NOWPAYMENTS_PRICE_CURRENCY=GHS
 ```
 
 Process types:
@@ -199,6 +205,37 @@ https://api.yourdomain.com/api/v1/payments/webhook
 
 ---
 
+## 5. NOWPayments (BTC and USDT)
+
+Crypto deposits use the same payment-intent and wallet ledger as Moolre.
+The browser never calls `api.nowpayments.io`.
+
+- `POST /api/v1/payments/deposits` with `provider=nowpayments`
+- `GET /api/v1/payments/{provider_ref}` reconciles provider status for that user
+- `POST /api/v1/payments/webhooks/nowpayments` verifies `x-nowpayments-sig`
+
+Supported assets are fixed in the backend:
+
+| Frontend `channel` | Frontend `network` | NOWPayments `pay_currency` |
+| --- | --- | --- |
+| `btc` | `bitcoin` (optional) | `btc` |
+| `usdt` | `trc20` | `usdttrc20` |
+| `usdt` | `erc20` | `usdterc20` |
+
+`NOWPAYMENTS_PRICE_CURRENCY` must equal `PAYMENT_CURRENCY`. BetPlus does not
+convert GHS to USD. Wallet credit happens only when the provider status is
+`finished` and the fiat price matches the BetPlus deposit. Set:
+
+```text
+NOWPAYMENTS_BASE_URL=https://api.sandbox.nowpayments.io
+```
+
+for sandbox, and `https://api.nowpayments.io` for production. The callback URL
+must be the public HTTPS path above. Do not put `NOWPAYMENTS_API_KEY` or
+`NOWPAYMENTS_IPN_SECRET` on Vercel.
+
+---
+
 ## Required backend environment
 
 | Variable | Production |
@@ -212,13 +249,19 @@ https://api.yourdomain.com/api/v1/payments/webhook
 | `PAYMENTS_MODE` | `moolre` for live money; `simulated` only with `ALLOW_SIMULATED_PAYMENTS=true` on staging |
 | `MOOLRE_ENV` | `sandbox` until go-live, then `production` |
 | `MOOLRE_*` | provider keys and callback secret |
+| `NOWPAYMENTS_ENABLED` | `true` only when crypto deposits should be offered |
+| `NOWPAYMENTS_API_KEY` | NOWPayments API key (Heroku only) |
+| `NOWPAYMENTS_BASE_URL` | `https://api.nowpayments.io` or `https://api.sandbox.nowpayments.io` |
+| `NOWPAYMENTS_IPN_SECRET` | IPN secret (Heroku only) |
+| `NOWPAYMENTS_IPN_CALLBACK_URL` | `https://api.yourdomain.com/api/v1/payments/webhooks/nowpayments` |
+| `NOWPAYMENTS_PRICE_CURRENCY` | same code as `PAYMENT_CURRENCY` |
 | `RATE_LIMIT_ENABLED` | `true` |
 
 ---
 
 ## Staging checklist
 
-- [ ] Alembic head applied (`007_webhook_events`)
+- [ ] Alembic head applied (`008_nowpayments`)
 - [ ] Health and ready endpoints 200
 - [ ] Register / login / `/me` using the HTTP-only cookie
 - [ ] Catalog games from PostgreSQL
