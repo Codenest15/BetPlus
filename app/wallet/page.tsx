@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { addTransaction, getTransactionsByUser } from "@/lib/bet-store";
 import { recordUserDeposit, recordUserWithdrawal } from "@/lib/platform-store";
@@ -17,7 +17,6 @@ import {
   initiateWithdrawal,
   getPaymentStatus,
   getTransactions as apiGetTransactions,
-  paymentNeedsOtp,
   paymentOtpErrorReference,
   useBackendApi,
   withdraw as apiWithdraw,
@@ -29,9 +28,7 @@ import {
   MOBILE_NETWORKS,
   USDT_NETWORKS,
   WITHDRAW_METHODS,
-  estimateCryptoAmount,
   formatCardNumber,
-  getCryptoDepositAddress,
   isValidCardNumber,
   isValidCvv,
   isValidExpiry,
@@ -136,11 +133,25 @@ export default function WalletPage() {
   const [amountInput, setAmountInput] = useState("");
   const [depositMethod, setDepositMethod] = useState<DepositMethod>("mobile-money");
   const [withdrawMethod, setWithdrawMethod] = useState<WithdrawMethod>("mobile-money");
-  const [mobileNetwork, setMobileNetwork] = useState<MobileNetwork>("mtn");
+  const [mobileNetwork, setMobileNetwork] = useState<MobileNetwork>(() =>
+    user?.phone ? inferGhanaMoMoNetwork(user.phone) ?? "mtn" : "mtn",
+  );
   const [usdtNetwork, setUsdtNetwork] = useState<UsdtNetwork>("trc20");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(() =>
+    user?.phone ? normalizeGhanaMoMoPhone(user.phone) ?? user.phone : "",
+  );
   const [cryptoAddress, setCryptoAddress] = useState("");
-  const [cryptoStep, setCryptoStep] = useState(false);
+  const [, setCryptoStep] = useState(false);
+  const [cryptoInvoice, setCryptoInvoice] = useState<{
+    reference: string;
+    payAddress: string;
+    payAmount: string;
+    payCurrency: string;
+    network: string | null;
+    status: string;
+    expiresAt: string | null;
+    reviewRequired: boolean;
+  } | null>(null);
   const [cardNumber, setCardNumber] = useState("");
   const [cardName, setCardName] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
@@ -158,7 +169,16 @@ export default function WalletPage() {
     amount: number;
   } | null>(null);
   const [otpInput, setOtpInput] = useState("");
-  const phoneFieldEdited = useRef(false);
+  const [phoneFieldEdited, setPhoneFieldEdited] = useState(false);
+  const userPhone = user?.phone ?? "";
+  const normalizedUserPhone =
+    userPhone && !phoneFieldEdited
+      ? normalizeGhanaMoMoPhone(userPhone) ?? userPhone
+      : phone;
+  const inferredUserNetwork =
+    userPhone && !phoneFieldEdited
+      ? inferGhanaMoMoNetwork(userPhone) ?? mobileNetwork
+      : mobileNetwork;
 
   function clearDepositOtpStep() {
     setDepositOtpStep(false);
@@ -213,26 +233,73 @@ export default function WalletPage() {
   }, [user, backendMode]);
 
   useEffect(() => {
-    if (!user) {
-      setTransactions([]);
-      return;
-    }
-    if (backendMode) {
-      void loadTransactions();
-    }
+    if (!user || !backendMode) return;
+    void loadTransactions();
   }, [user, backendMode, loadTransactions]);
 
   useEffect(() => {
-    phoneFieldEdited.current = false;
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.phone || phoneFieldEdited.current) return;
-    const normalized = normalizeGhanaMoMoPhone(user.phone);
-    if (normalized) setPhone(normalized);
-    const inferred = inferGhanaMoMoNetwork(user.phone);
-    if (inferred) setMobileNetwork(inferred);
-  }, [user?.phone, user?.id]);
+    if (!backendMode || !cryptoInvoice) return;
+    if (
+      cryptoInvoice.reviewRequired ||
+      !["pending", "processing"].includes(cryptoInvoice.status)
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const latest = await getPaymentStatus(cryptoInvoice.reference);
+          if (cancelled) return;
+          setCryptoInvoice((current) =>
+            current && current.reference === cryptoInvoice.reference
+              ? {
+                  ...current,
+                  status: latest.status,
+                  reviewRequired: latest.review_required === true,
+                  payAddress: latest.pay_address || current.payAddress,
+                  payAmount: latest.pay_amount || current.payAmount,
+                }
+              : current,
+          );
+          if (latest.status === "completed") {
+            await refreshUser();
+            await loadTransactions();
+            setMessage(
+              `Deposited ${formatMoney(latest.amount)} successfully`,
+            );
+            setError("");
+          } else if (latest.review_required) {
+            setError(
+              "This crypto payment needs review. Your wallet was not credited.",
+            );
+            setMessage("");
+          } else if (
+            isTerminalPaymentFailure(latest.status) ||
+            latest.status === "expired"
+          ) {
+            setMessage("");
+            setError(
+              latest.status === "expired"
+                ? "This crypto deposit expired. Start a new deposit."
+                : `Crypto deposit ${latest.status}. Your wallet was not credited.`,
+            );
+          }
+        } catch {
+          /* Polling is only a status view. The next attempt retries. */
+        }
+      })();
+    }, PAYMENT_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    backendMode,
+    cryptoInvoice,
+    loadTransactions,
+    refreshUser,
+  ]);
 
   if (!user) {
     return (
@@ -282,12 +349,12 @@ export default function WalletPage() {
     if (backendMode && depositMethod === "mobile-money") {
       setSubmitting(true);
       try {
-        const momoPhone = normalizeGhanaMoMoPhone(phone);
+        const momoPhone = normalizeGhanaMoMoPhone(normalizedUserPhone);
         if (!momoPhone) {
           setError("Enter a valid Ghana mobile money number (e.g. 054 123 4567).");
           return false;
         }
-        const inferredNetwork = inferGhanaMoMoNetwork(momoPhone) ?? mobileNetwork;
+        const inferredNetwork = inferGhanaMoMoNetwork(momoPhone) ?? inferredUserNetwork;
         const networkError = validateGhanaMoMoForNetwork(momoPhone, inferredNetwork);
         if (networkError) {
           setError(networkError);
@@ -460,12 +527,12 @@ export default function WalletPage() {
     }
 
     if (depositMethod === "mobile-money") {
-      const momoPhone = normalizeGhanaMoMoPhone(phone);
+      const momoPhone = normalizeGhanaMoMoPhone(normalizedUserPhone);
       if (!momoPhone) {
         setError("Enter a valid Ghana mobile money number (e.g. 054 123 4567).");
         return;
       }
-      const inferredNetwork = inferGhanaMoMoNetwork(momoPhone) ?? mobileNetwork;
+      const inferredNetwork = inferGhanaMoMoNetwork(momoPhone) ?? inferredUserNetwork;
       const networkError = validateGhanaMoMoForNetwork(momoPhone, inferredNetwork);
       if (networkError) {
         setError(networkError);
@@ -482,16 +549,99 @@ export default function WalletPage() {
     }
 
     if (depositMethod === "btc" || depositMethod === "usdt") {
-      if (!cryptoStep) {
-        setCryptoStep(true);
+      if (!backendMode) {
+        setError("Crypto deposits are temporarily unavailable. Please try again later.");
         return;
       }
 
-      await creditWallet(
-        depositMethod === "btc"
-          ? "Bitcoin (BTC) deposit"
-          : `USDT deposit (${usdtNetwork.toUpperCase()})`,
-      );
+      const depositError = validateDepositAmount(amount, depositMarket);
+      if (depositError) {
+        setError(depositError);
+        return;
+      }
+
+      if (cryptoInvoice && ["pending", "processing"].includes(cryptoInvoice.status)) {
+        setSubmitting(true);
+        try {
+          const latest = await getPaymentStatus(cryptoInvoice.reference);
+          setCryptoInvoice({
+            reference: latest.provider_ref,
+            payAddress: latest.pay_address || cryptoInvoice.payAddress,
+            payAmount: latest.pay_amount || cryptoInvoice.payAmount,
+            payCurrency: latest.pay_currency || cryptoInvoice.payCurrency,
+            network: latest.network ?? cryptoInvoice.network,
+            status: latest.status,
+            expiresAt: latest.expires_at ?? cryptoInvoice.expiresAt,
+            reviewRequired: latest.review_required === true,
+          });
+          if (latest.status === "completed") {
+            await refreshUser();
+            await loadTransactions();
+            setMessage(`Deposited ${formatMoney(latest.amount)} successfully`);
+            setError("");
+            return;
+          }
+          if (latest.review_required) {
+            setError("This crypto payment needs review. Your wallet was not credited.");
+            setMessage("");
+            return;
+          }
+          if (latest.status === "failed" || latest.status === "expired") {
+            setError(
+              latest.status === "expired"
+                ? "This crypto deposit expired. Start a new deposit."
+                : "This crypto deposit failed. Your wallet was not credited.",
+            );
+            setMessage("");
+            return;
+          }
+          setMessage("Payment status refreshed.");
+          return;
+        } catch (err) {
+          setError(formatPaymentUserError(err, "deposit"));
+          return;
+        } finally {
+          setSubmitting(false);
+        }
+      }
+
+      setSubmitting(true);
+      try {
+        const payment = await initiateDeposit(
+          amount,
+          depositMethod === "btc" ? "btc" : "usdt",
+          undefined,
+          crypto.randomUUID(),
+          undefined,
+          {
+            provider: "nowpayments",
+            network: depositMethod === "btc" ? "bitcoin" : usdtNetwork,
+          },
+        );
+        if (!payment.pay_address || !payment.pay_amount) {
+          setError("Crypto deposit did not return payment instructions.");
+          return;
+        }
+        setCryptoInvoice({
+          reference: payment.provider_ref,
+          payAddress: payment.pay_address,
+          payAmount: payment.pay_amount,
+          payCurrency: payment.pay_currency || (depositMethod === "btc" ? "btc" : "usdt"),
+          network: payment.network ?? (depositMethod === "usdt" ? usdtNetwork : "bitcoin"),
+          status: payment.status,
+          expiresAt: payment.expires_at ?? null,
+          reviewRequired: payment.review_required === true,
+        });
+        setCryptoStep(false);
+        setMessage(
+          "Send the exact amount to the address below. BetPlus credits your wallet only after the crypto payment is confirmed.",
+        );
+      } catch (err) {
+        setError(formatPaymentUserError(err, "deposit"));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
     }
   }
 
@@ -508,12 +658,12 @@ export default function WalletPage() {
     }
 
     if (withdrawMethod === "mobile-money") {
-      const momoPhone = normalizeGhanaMoMoPhone(phone);
+      const momoPhone = normalizeGhanaMoMoPhone(normalizedUserPhone);
       if (!momoPhone) {
         setError("Enter a valid Ghana mobile money number (e.g. 054 123 4567).");
         return;
       }
-      const networkError = validateGhanaMoMoForNetwork(momoPhone, mobileNetwork);
+      const networkError = validateGhanaMoMoForNetwork(momoPhone, inferredUserNetwork);
       if (networkError) {
         setError(networkError);
         return;
@@ -535,14 +685,14 @@ export default function WalletPage() {
     if (backendMode && withdrawMethod === "mobile-money") {
       setSubmitting(true);
       try {
-        const momoPhone = normalizeGhanaMoMoPhone(phone)!;
+        const momoPhone = normalizeGhanaMoMoPhone(normalizedUserPhone)!;
         const payment = await initiateWithdrawal(
           amount,
           "mobile_money",
           momoPhone,
           momoPhone,
           crypto.randomUUID(),
-          momoNetworkToProviderChannel(mobileNetwork),
+          momoNetworkToProviderChannel(inferredUserNetwork),
         );
         await refreshUser();
         await loadTransactions();
@@ -669,6 +819,7 @@ export default function WalletPage() {
                         setWithdrawMethod(method.id as WithdrawMethod);
                       }
                       setCryptoStep(false);
+                      setCryptoInvoice(null);
                       resetMessages();
                     }}
                     className={`rounded-lg border px-3 py-2.5 text-left ${WALLET_BTN} ${
@@ -758,9 +909,9 @@ export default function WalletPage() {
                   inputMode="tel"
                   autoComplete="tel"
                   placeholder="024 123 4567"
-                  value={phone}
+                  value={normalizedUserPhone}
                   onChange={(e) => {
-                    phoneFieldEdited.current = true;
+                    setPhoneFieldEdited(true);
                     setPhone(e.target.value);
                   }}
                   className="w-full rounded-md border border-border/80 bg-surface-elevated px-3 py-2 text-sm outline-none focus:border-brand"
@@ -876,6 +1027,7 @@ export default function WalletPage() {
                       onClick={() => {
                         setUsdtNetwork(network.id);
                         setCryptoStep(false);
+                        setCryptoInvoice(null);
                       }}
                       className={`flex-1 rounded-md border px-2 py-1.5 text-[11px] font-semibold ${
                         usdtNetwork === network.id
@@ -939,7 +1091,8 @@ export default function WalletPage() {
           )}
 
           {tab === "deposit" &&
-            cryptoStep &&
+            backendMode &&
+            cryptoInvoice &&
             (depositMethod === "btc" || depositMethod === "usdt") && (
               <div className="card space-y-3 border-brand-soft bg-brand-light/40 p-3">
                 <div className="flex items-center gap-2.5">
@@ -952,26 +1105,33 @@ export default function WalletPage() {
                     size={36}
                     className="h-9 w-9"
                   />
-                  <p className="text-xs font-semibold text-brand-dark">
-                    Send exactly{" "}
-                    {estimateCryptoAmount(amount, depositMethod)}{" "}
-                    {depositMethod === "btc" ? "BTC" : "USDT"} ({usdtNetwork.toUpperCase()})
-                  </p>
+                  <div>
+                    <p className="text-xs font-semibold text-brand-dark">
+                      Send exactly {cryptoInvoice.payAmount}{" "}
+                      {cryptoInvoice.payCurrency.toUpperCase()}
+                    </p>
+                    <p className="text-[10px] text-muted">
+                      Provider: NOWPayments
+                    </p>
+                  </div>
                 </div>
                 <p className="text-[10px] text-muted">
-                  Equivalent to {formatMoney(amount)} at current demo rate
+                  Status: {cryptoInvoice.status}
+                  {cryptoInvoice.network
+                    ? ` · Network: ${cryptoInvoice.network.toUpperCase()}`
+                    : ""}
+                  {cryptoInvoice.expiresAt
+                    ? ` · expires ${new Date(cryptoInvoice.expiresAt).toLocaleString()}`
+                    : ""}
                 </p>
                 <div className="flex items-start gap-2 rounded-md border border-brand-soft bg-white p-2.5">
                   <p className="min-w-0 flex-1 break-all font-mono text-[10px] leading-relaxed text-foreground">
-                    {getCryptoDepositAddress(depositMethod, usdtNetwork)}
+                    {cryptoInvoice.payAddress}
                   </p>
-                  <CopyButton
-                    value={getCryptoDepositAddress(depositMethod, usdtNetwork)}
-                  />
+                  <CopyButton value={cryptoInvoice.payAddress} />
                 </div>
                 <p className="text-[10px] leading-snug text-muted">
-                  Send only {depositMethod === "btc" ? "BTC" : `USDT (${usdtNetwork.toUpperCase()})`} to
-                  this address. Balance credits after network confirmation.
+                  Send only {depositMethod === "btc" ? "BTC" : `USDT (${(cryptoInvoice.network || usdtNetwork).toUpperCase()})`} to this address. Your wallet is credited only after the backend confirms the provider payment.
                 </p>
               </div>
             )}
@@ -984,6 +1144,7 @@ export default function WalletPage() {
                 onClick={() => {
                   setAmountInput(String(a));
                   setCryptoStep(false);
+                  setCryptoInvoice(null);
                 }}
                 className={`rounded-md border px-2.5 py-1 text-xs font-medium ${WALLET_BTN} ${
                   Number.isFinite(amount) && Math.abs(amount - a) < 1e-9
@@ -1017,6 +1178,7 @@ export default function WalletPage() {
                 if (next === "" || /^\d*\.?\d{0,2}$/.test(next)) {
                   setAmountInput(next);
                   setCryptoStep(false);
+                  setCryptoInvoice(null);
                 }
               }}
               onFocus={(e) => e.target.select()}
@@ -1082,8 +1244,10 @@ export default function WalletPage() {
               : tab === "deposit"
                 ? depositOtpStep
                   ? "Verify & complete deposit"
-                  : cryptoStep && (depositMethod === "btc" || depositMethod === "usdt")
-                    ? "I have sent payment"
+                  : cryptoInvoice &&
+                      backendMode &&
+                      (depositMethod === "btc" || depositMethod === "usdt")
+                    ? "Refresh payment status"
                     : depositMethod === "mobile-money"
                       ? backendMode
                         ? "Continue to Moolre"

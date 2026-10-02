@@ -120,6 +120,21 @@ export function formatPaymentUserError(
         ? err.message
         : "The payment provider could not start this payment.";
   }
+  const normalized = reason.toLowerCase();
+  if (
+    action === "deposit" &&
+    (
+      err.status === 503 ||
+      normalized.includes("not enabled") ||
+      normalized.includes("not configured") ||
+      normalized.includes("provider is unavailable") ||
+      normalized.includes("temporarily unavailable") ||
+      normalized.includes("crypto payments are not enabled") ||
+      normalized.includes("crypto provider")
+    )
+  ) {
+    return "Crypto deposits are temporarily unavailable. Please try again later.";
+  }
   const reference = paymentErrorReference(err.body);
   const parts = [`${fallback} Reason: ${reason}`];
   if (reference) parts.push(`Reference: ${reference}`);
@@ -270,12 +285,24 @@ export async function logoutUser(): Promise<void> {
 
 export interface BackendPaymentIntent {
   id: string;
+  transaction_id?: string;
   provider_ref: string;
+  provider?: string;
   status: string;
   amount: number;
+  currency?: string;
+  channel?: string | null;
+  network?: string | null;
   authorization_url: string | null;
   otp_required?: boolean;
   next_action?: string | null;
+  pay_address?: string | null;
+  pay_amount?: string | null;
+  pay_currency?: string | null;
+  payment_id?: string | null;
+  provider_status?: string | null;
+  expires_at?: string | null;
+  review_required?: boolean;
 }
 
 export function paymentNeedsOtp(payment: {
@@ -305,6 +332,7 @@ export async function initiateDeposit(
   idempotencyKey?: string,
   /** Moolre network code (MTN, TELECEL, AT) — sent as `destination` for the API. */
   momoProviderChannel?: string,
+  crypto?: { network?: string; provider?: "nowpayments" },
 ) {
   const headers: HeadersInit = {};
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
@@ -317,6 +345,8 @@ export async function initiateDeposit(
       phone,
       payer_phone: phone,
       destination: momoProviderChannel ?? undefined,
+      network: crypto?.network,
+      provider: crypto?.provider,
     }),
   });
 }
